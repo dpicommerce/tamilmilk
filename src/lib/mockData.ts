@@ -3,6 +3,7 @@ import { Customer, Transaction, DailySummary } from '@/types';
 export const mockCustomers: Customer[] = [
   {
     id: '1',
+    customerId: 'CUST001',
     name: 'Rajesh Kumar',
     phone: '+91 98765 43210',
     address: '123 Main Street, Delhi',
@@ -11,6 +12,7 @@ export const mockCustomers: Customer[] = [
   },
   {
     id: '2',
+    customerId: 'CUST002',
     name: 'Priya Sharma',
     phone: '+91 87654 32109',
     address: '456 Park Road, Mumbai',
@@ -19,6 +21,7 @@ export const mockCustomers: Customer[] = [
   },
   {
     id: '3',
+    customerId: 'CUST003',
     name: 'Amit Patel',
     phone: '+91 76543 21098',
     address: '789 Lake View, Ahmedabad',
@@ -27,6 +30,7 @@ export const mockCustomers: Customer[] = [
   },
   {
     id: '4',
+    customerId: 'CUST004',
     name: 'Sunita Devi',
     phone: '+91 65432 10987',
     address: '321 Hill Top, Jaipur',
@@ -35,6 +39,7 @@ export const mockCustomers: Customer[] = [
   },
   {
     id: '5',
+    customerId: 'CUST005',
     name: 'Mohammad Ali',
     phone: '+91 54321 09876',
     address: '654 Garden Lane, Lucknow',

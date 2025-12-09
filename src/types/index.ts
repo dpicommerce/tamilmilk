@@ -1,5 +1,6 @@
 export interface Customer {
   id: string;
+  customerId: string; // Unique customer ID like "CUST001"
   name: string;
   phone: string;
   address: string;
