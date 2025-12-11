@@ -1,11 +1,11 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { mockCustomers } from '@/lib/mockData';
-import { Customer } from '@/types';
+import { useAuth } from '@/hooks/useAuth';
+import { supabase } from '@/integrations/supabase/client';
 import { cn } from '@/lib/utils';
-import { Plus, Search, User, Phone, MapPin, Edit, Trash2, Hash } from 'lucide-react';
+import { Plus, Search, User, Phone, MapPin, Edit, Trash2, Hash, Loader2 } from 'lucide-react';
 import { format } from 'date-fns';
 import {
   Drawer,
@@ -17,33 +17,70 @@ import {
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 
-const generateCustomerId = (customers: Customer[]) => {
-  const maxId = customers.reduce((max, c) => {
-    const num = parseInt(c.customerId.replace('CUST', ''), 10);
-    return num > max ? num : max;
-  }, 0);
-  return `CUST${String(maxId + 1).padStart(3, '0')}`;
-};
+interface CustomerData {
+  id: string;
+  customer_id: string;
+  name: string;
+  phone: string;
+  address: string | null;
+  balance: number;
+  created_at: string;
+}
 
 export default function Customers() {
-  const [customers, setCustomers] = useState<Customer[]>(mockCustomers);
+  const [customers, setCustomers] = useState<CustomerData[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [nextCustomerId, setNextCustomerId] = useState('CUST001');
   const [formData, setFormData] = useState({
     name: '',
     phone: '',
     address: '',
   });
   const { toast } = useToast();
+  const { isAdmin, user } = useAuth();
+
+  const fetchCustomers = async () => {
+    const { data, error } = await supabase
+      .from('customers')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error('Error fetching customers:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to load customers',
+        variant: 'destructive',
+      });
+    } else {
+      setCustomers(data || []);
+    }
+    setIsLoading(false);
+  };
+
+  const fetchNextCustomerId = async () => {
+    const { data, error } = await supabase.rpc('generate_customer_id');
+    if (!error && data) {
+      setNextCustomerId(data);
+    }
+  };
+
+  useEffect(() => {
+    fetchCustomers();
+    fetchNextCustomerId();
+  }, []);
 
   const filteredCustomers = customers.filter(
     (customer) =>
       customer.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       customer.phone.includes(searchQuery) ||
-      customer.customerId.toLowerCase().includes(searchQuery.toLowerCase())
+      customer.customer_id.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const handleAddCustomer = () => {
+  const handleAddCustomer = async () => {
     if (!formData.name || !formData.phone) {
       toast({
         title: 'Error',
@@ -53,24 +90,61 @@ export default function Customers() {
       return;
     }
 
-    const newCustomer: Customer = {
-      id: Date.now().toString(),
-      customerId: generateCustomerId(customers),
-      name: formData.name,
-      phone: formData.phone,
-      address: formData.address,
-      balance: 0,
-      createdAt: new Date(),
-    };
+    if (!isAdmin) {
+      toast({
+        title: 'Access Denied',
+        description: 'Only admins can add customers',
+        variant: 'destructive',
+      });
+      return;
+    }
 
-    setCustomers([...customers, newCustomer]);
-    setFormData({ name: '', phone: '', address: '' });
-    setIsDrawerOpen(false);
-    toast({
-      title: 'Success',
-      description: `Customer ${newCustomer.customerId} added successfully`,
-    });
+    setIsSubmitting(true);
+
+    const { data, error } = await supabase
+      .from('customers')
+      .insert({
+        customer_id: nextCustomerId,
+        name: formData.name,
+        phone: formData.phone,
+        address: formData.address || null,
+        created_by: user?.id,
+      })
+      .select()
+      .single();
+
+    if (error) {
+      console.error('Error adding customer:', error);
+      toast({
+        title: 'Error',
+        description: error.message.includes('row-level security')
+          ? 'Only admins can add customers'
+          : 'Failed to add customer',
+        variant: 'destructive',
+      });
+    } else {
+      setCustomers([data, ...customers]);
+      setFormData({ name: '', phone: '', address: '' });
+      setIsDrawerOpen(false);
+      fetchNextCustomerId();
+      toast({
+        title: 'Success',
+        description: `Customer ${data.customer_id} added successfully`,
+      });
+    }
+
+    setIsSubmitting(false);
   };
+
+  if (isLoading) {
+    return (
+      <MainLayout title="Customers" subtitle="Manage your customer database">
+        <div className="flex items-center justify-center py-12">
+          <Loader2 className="w-8 h-8 animate-spin text-primary" />
+        </div>
+      </MainLayout>
+    );
+  }
 
   return (
     <MainLayout title="Customers" subtitle="Manage your customer database">
@@ -85,60 +159,76 @@ export default function Customers() {
             className="pl-10 h-12 text-base"
           />
         </div>
-        <Drawer open={isDrawerOpen} onOpenChange={setIsDrawerOpen}>
-          <DrawerTrigger asChild>
-            <Button variant="gradient" className="w-full h-12 text-base">
-              <Plus className="w-5 h-5 mr-2" />
-              Add Customer
-            </Button>
-          </DrawerTrigger>
-          <DrawerContent>
-            <DrawerHeader>
-              <DrawerTitle>Add New Customer</DrawerTitle>
-            </DrawerHeader>
-            <div className="space-y-4 p-4 pb-8">
-              <div className="bg-secondary/50 rounded-lg p-3 flex items-center gap-2">
-                <Hash className="w-4 h-4 text-primary" />
-                <span className="text-sm text-muted-foreground">Customer ID:</span>
-                <span className="font-semibold text-primary">{generateCustomerId(customers)}</span>
-              </div>
-              <div>
-                <Label htmlFor="name" className="text-base">Name *</Label>
-                <Input
-                  id="name"
-                  value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  placeholder="Customer name"
-                  className="h-12 text-base mt-1"
-                />
-              </div>
-              <div>
-                <Label htmlFor="phone" className="text-base">Mobile Number *</Label>
-                <Input
-                  id="phone"
-                  type="tel"
-                  value={formData.phone}
-                  onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                  placeholder="+91 12345 67890"
-                  className="h-12 text-base mt-1"
-                />
-              </div>
-              <div>
-                <Label htmlFor="address" className="text-base">Address</Label>
-                <Input
-                  id="address"
-                  value={formData.address}
-                  onChange={(e) => setFormData({ ...formData, address: e.target.value })}
-                  placeholder="Customer address"
-                  className="h-12 text-base mt-1"
-                />
-              </div>
-              <Button onClick={handleAddCustomer} className="w-full h-12 text-base" variant="gradient">
+        
+        {/* Only show Add button for admins */}
+        {isAdmin && (
+          <Drawer open={isDrawerOpen} onOpenChange={setIsDrawerOpen}>
+            <DrawerTrigger asChild>
+              <Button variant="gradient" className="w-full h-12 text-base">
+                <Plus className="w-5 h-5 mr-2" />
                 Add Customer
               </Button>
-            </div>
-          </DrawerContent>
-        </Drawer>
+            </DrawerTrigger>
+            <DrawerContent>
+              <DrawerHeader>
+                <DrawerTitle>Add New Customer</DrawerTitle>
+              </DrawerHeader>
+              <div className="space-y-4 p-4 pb-8">
+                <div className="bg-secondary/50 rounded-lg p-3 flex items-center gap-2">
+                  <Hash className="w-4 h-4 text-primary" />
+                  <span className="text-sm text-muted-foreground">Customer ID:</span>
+                  <span className="font-semibold text-primary">{nextCustomerId}</span>
+                </div>
+                <div>
+                  <Label htmlFor="name" className="text-base">Name *</Label>
+                  <Input
+                    id="name"
+                    value={formData.name}
+                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                    placeholder="Customer name"
+                    className="h-12 text-base mt-1"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="phone" className="text-base">Mobile Number *</Label>
+                  <Input
+                    id="phone"
+                    type="tel"
+                    value={formData.phone}
+                    onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                    placeholder="+91 12345 67890"
+                    className="h-12 text-base mt-1"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="address" className="text-base">Address</Label>
+                  <Input
+                    id="address"
+                    value={formData.address}
+                    onChange={(e) => setFormData({ ...formData, address: e.target.value })}
+                    placeholder="Customer address"
+                    className="h-12 text-base mt-1"
+                  />
+                </div>
+                <Button 
+                  onClick={handleAddCustomer} 
+                  className="w-full h-12 text-base" 
+                  variant="gradient"
+                  disabled={isSubmitting}
+                >
+                  {isSubmitting ? (
+                    <span className="flex items-center gap-2">
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Adding...
+                    </span>
+                  ) : (
+                    'Add Customer'
+                  )}
+                </Button>
+              </div>
+            </DrawerContent>
+          </Drawer>
+        )}
       </div>
 
       {/* Customer List - Mobile Card View */}
@@ -166,18 +256,20 @@ export default function Customers() {
                     </h3>
                     <div className="flex items-center gap-1 text-xs text-primary font-medium">
                       <Hash className="w-3 h-3" />
-                      {customer.customerId}
+                      {customer.customer_id}
                     </div>
                   </div>
                 </div>
-                <div className="flex gap-1 flex-shrink-0">
-                  <Button variant="ghost" size="icon" className="h-8 w-8">
-                    <Edit className="w-4 h-4" />
-                  </Button>
-                  <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive">
-                    <Trash2 className="w-4 h-4" />
-                  </Button>
-                </div>
+                {isAdmin && (
+                  <div className="flex gap-1 flex-shrink-0">
+                    <Button variant="ghost" size="icon" className="h-8 w-8">
+                      <Edit className="w-4 h-4" />
+                    </Button>
+                    <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive">
+                      <Trash2 className="w-4 h-4" />
+                    </Button>
+                  </div>
+                )}
               </div>
 
               {/* Contact Info */}
@@ -201,14 +293,14 @@ export default function Customers() {
                   <p
                     className={cn(
                       'font-semibold text-lg',
-                      customer.balance >= 0 ? 'text-success' : 'text-destructive'
+                      Number(customer.balance) >= 0 ? 'text-success' : 'text-destructive'
                     )}
                   >
-                    {customer.balance >= 0 ? '+' : ''}₹{Math.abs(customer.balance).toLocaleString('en-IN')}
+                    {Number(customer.balance) >= 0 ? '+' : ''}₹{Math.abs(Number(customer.balance)).toLocaleString('en-IN')}
                   </p>
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  Since {format(customer.createdAt, 'MMM yyyy')}
+                  Since {format(new Date(customer.created_at), 'MMM yyyy')}
                 </p>
               </div>
             </div>
