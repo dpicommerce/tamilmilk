@@ -1,9 +1,9 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { mockTransactions, mockCustomers } from '@/lib/mockData';
-import { Transaction } from '@/types';
+import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/hooks/useAuth';
 import { cn } from '@/lib/utils';
 import {
   Plus,
@@ -14,6 +14,7 @@ import {
   CreditCard,
   Wallet,
   Download,
+  Loader2,
 } from 'lucide-react';
 import { format } from 'date-fns';
 import {
@@ -32,6 +33,32 @@ import {
 } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
+
+interface TransactionData {
+  id: string;
+  type: string;
+  amount: number;
+  quantity: number;
+  rate: number;
+  notes: string | null;
+  created_at: string;
+  customer_id: string | null;
+  supplier_id: string | null;
+  customer_name: string;
+  supplier_name: string;
+}
+
+interface CustomerData {
+  id: string;
+  customer_id: string;
+  name: string;
+}
+
+interface SupplierData {
+  id: string;
+  supplier_id: string;
+  name: string;
+}
 
 const typeConfig = {
   purchase: {
@@ -61,30 +88,83 @@ const typeConfig = {
 };
 
 export default function Transactions() {
-  const [transactions, setTransactions] = useState<Transaction[]>(mockTransactions);
+  const [transactions, setTransactions] = useState<TransactionData[]>([]);
+  const [customers, setCustomers] = useState<CustomerData[]>([]);
+  const [suppliers, setSuppliers] = useState<SupplierData[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterType, setFilterType] = useState<string>('all');
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [formData, setFormData] = useState({
-    customerId: '',
-    type: 'sale' as Transaction['type'],
+    entityId: '',
+    entityType: 'customer' as 'customer' | 'supplier',
+    type: 'sale' as 'purchase' | 'sale' | 'credit' | 'debit',
     quantity: '',
     rate: '',
     amount: '',
     notes: '',
   });
   const { toast } = useToast();
+  const { user } = useAuth();
+
+  useEffect(() => {
+    const fetchData = async () => {
+      // Fetch transactions with related data
+      const { data: txData } = await supabase
+        .from('transactions')
+        .select(`
+          *,
+          customers (name),
+          suppliers (name)
+        `)
+        .order('created_at', { ascending: false })
+        .limit(100);
+
+      if (txData) {
+        setTransactions(txData.map(tx => ({
+          id: tx.id,
+          type: tx.type,
+          amount: Number(tx.amount),
+          quantity: Number(tx.quantity),
+          rate: Number(tx.rate),
+          notes: tx.notes,
+          created_at: tx.created_at,
+          customer_id: tx.customer_id,
+          supplier_id: tx.supplier_id,
+          customer_name: tx.customers?.name || '',
+          supplier_name: tx.suppliers?.name || '',
+        })));
+      }
+
+      // Fetch customers and suppliers
+      const { data: custData } = await supabase
+        .from('customers')
+        .select('id, customer_id, name')
+        .order('name');
+      if (custData) setCustomers(custData);
+
+      const { data: suppData } = await supabase
+        .from('suppliers')
+        .select('id, supplier_id, name')
+        .order('name');
+      if (suppData) setSuppliers(suppData);
+
+      setIsLoading(false);
+    };
+
+    fetchData();
+  }, []);
 
   const filteredTransactions = transactions.filter((transaction) => {
-    const matchesSearch = transaction.customerName
-      .toLowerCase()
-      .includes(searchQuery.toLowerCase());
+    const name = transaction.customer_name || transaction.supplier_name;
+    const matchesSearch = name.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesType = filterType === 'all' || transaction.type === filterType;
     return matchesSearch && matchesType;
   });
 
-  const handleAddTransaction = () => {
-    if (!formData.customerId || !formData.amount) {
+  const handleAddTransaction = async () => {
+    if (!formData.entityId || !formData.amount) {
       toast({
         title: 'Error',
         description: 'Please fill in all required fields',
@@ -93,36 +173,84 @@ export default function Transactions() {
       return;
     }
 
-    const customer = mockCustomers.find((c) => c.id === formData.customerId);
-    if (!customer) return;
+    const entity = formData.entityType === 'customer'
+      ? customers.find((c) => c.id === formData.entityId)
+      : suppliers.find((s) => s.id === formData.entityId);
+    
+    if (!entity) return;
 
-    const newTransaction: Transaction = {
-      id: Date.now().toString(),
-      customerId: formData.customerId,
-      customerName: customer.name,
+    setIsSubmitting(true);
+
+    const insertData: any = {
       type: formData.type,
       quantity: parseFloat(formData.quantity) || 0,
       rate: parseFloat(formData.rate) || 0,
       amount: parseFloat(formData.amount),
-      date: new Date(),
-      notes: formData.notes,
+      notes: formData.notes || null,
+      created_by: user?.id,
     };
 
-    setTransactions([newTransaction, ...transactions]);
-    setFormData({
-      customerId: '',
-      type: 'sale',
-      quantity: '',
-      rate: '',
-      amount: '',
-      notes: '',
-    });
-    setIsDialogOpen(false);
-    toast({
-      title: 'Success',
-      description: 'Transaction recorded successfully',
-    });
+    if (formData.entityType === 'customer') {
+      insertData.customer_id = formData.entityId;
+    } else {
+      insertData.supplier_id = formData.entityId;
+    }
+
+    const { data, error } = await supabase
+      .from('transactions')
+      .insert(insertData)
+      .select()
+      .single();
+
+    if (error) {
+      toast({
+        title: 'Error',
+        description: 'Failed to record transaction',
+        variant: 'destructive',
+      });
+    } else {
+      setTransactions([{
+        id: data.id,
+        type: data.type,
+        amount: Number(data.amount),
+        quantity: Number(data.quantity),
+        rate: Number(data.rate),
+        notes: data.notes,
+        created_at: data.created_at,
+        customer_id: data.customer_id,
+        supplier_id: data.supplier_id,
+        customer_name: formData.entityType === 'customer' ? entity.name : '',
+        supplier_name: formData.entityType === 'supplier' ? entity.name : '',
+      }, ...transactions]);
+      
+      setFormData({
+        entityId: '',
+        entityType: 'customer',
+        type: 'sale',
+        quantity: '',
+        rate: '',
+        amount: '',
+        notes: '',
+      });
+      setIsDialogOpen(false);
+      toast({
+        title: 'Success',
+        description: 'Transaction recorded successfully',
+      });
+    }
+
+    setIsSubmitting(false);
   };
+
+  if (isLoading) {
+    return (
+      <MainLayout title="Transactions" subtitle="View and manage all transactions">
+        <div className="flex items-center justify-center py-12">
+          <Loader2 className="w-8 h-8 animate-spin text-primary" />
+        </div>
+      </MainLayout>
+    );
+  }
 
   return (
     <MainLayout title="Transactions" subtitle="View and manage all transactions">
@@ -170,20 +298,44 @@ export default function Transactions() {
               </DialogHeader>
               <div className="space-y-4 pt-4">
                 <div>
-                  <Label htmlFor="customer">Customer *</Label>
+                  <Label htmlFor="entityType">Entity Type *</Label>
                   <Select
-                    value={formData.customerId}
-                    onValueChange={(value) => setFormData({ ...formData, customerId: value })}
+                    value={formData.entityType}
+                    onValueChange={(value: 'customer' | 'supplier') => 
+                      setFormData({ ...formData, entityType: value, entityId: '' })
+                    }
                   >
                     <SelectTrigger>
-                      <SelectValue placeholder="Select customer" />
+                      <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      {mockCustomers.map((customer) => (
-                        <SelectItem key={customer.id} value={customer.id}>
-                          {customer.name}
-                        </SelectItem>
-                      ))}
+                      <SelectItem value="customer">Customer</SelectItem>
+                      <SelectItem value="supplier">Supplier</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label htmlFor="entity">{formData.entityType === 'customer' ? 'Customer' : 'Supplier'} *</Label>
+                  <Select
+                    value={formData.entityId}
+                    onValueChange={(value) => setFormData({ ...formData, entityId: value })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder={`Select ${formData.entityType}`} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {formData.entityType === 'customer'
+                        ? customers.map((c) => (
+                            <SelectItem key={c.id} value={c.id}>
+                              {c.name} ({c.customer_id})
+                            </SelectItem>
+                          ))
+                        : suppliers.map((s) => (
+                            <SelectItem key={s.id} value={s.id}>
+                              {s.name} ({s.supplier_id})
+                            </SelectItem>
+                          ))
+                      }
                     </SelectContent>
                   </Select>
                 </div>
@@ -191,8 +343,8 @@ export default function Transactions() {
                   <Label htmlFor="type">Type *</Label>
                   <Select
                     value={formData.type}
-                    onValueChange={(value) =>
-                      setFormData({ ...formData, type: value as Transaction['type'] })
+                    onValueChange={(value: 'purchase' | 'sale' | 'credit' | 'debit') =>
+                      setFormData({ ...formData, type: value })
                     }
                   >
                     <SelectTrigger>
@@ -249,7 +401,15 @@ export default function Transactions() {
                     placeholder="Optional notes"
                   />
                 </div>
-                <Button onClick={handleAddTransaction} className="w-full" variant="gradient">
+                <Button 
+                  onClick={handleAddTransaction} 
+                  className="w-full" 
+                  variant="gradient"
+                  disabled={isSubmitting}
+                >
+                  {isSubmitting ? (
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  ) : null}
                   Record Transaction
                 </Button>
               </div>
@@ -260,52 +420,60 @@ export default function Transactions() {
 
       {/* Transactions List */}
       <div className="stat-card">
-        <div className="space-y-3">
-          {filteredTransactions.map((transaction) => {
-            const config = typeConfig[transaction.type];
-            const Icon = config.icon;
+        {filteredTransactions.length === 0 ? (
+          <div className="text-center py-12 text-muted-foreground">
+            <CreditCard className="w-12 h-12 mx-auto mb-4 opacity-50" />
+            <p>No transactions found</p>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {filteredTransactions.map((transaction) => {
+              const config = typeConfig[transaction.type as keyof typeof typeConfig];
+              const Icon = config?.icon || CreditCard;
+              const name = transaction.customer_name || transaction.supplier_name || 'Unknown';
 
-            return (
-              <div
-                key={transaction.id}
-                className="flex items-center gap-4 p-4 rounded-lg bg-secondary/30 hover:bg-secondary/50 transition-colors animate-fade-in"
-              >
-                <div className={cn('w-12 h-12 rounded-xl flex items-center justify-center', config.bg)}>
-                  <Icon className={cn('w-6 h-6', config.color)} />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <p className="font-semibold text-foreground">{transaction.customerName}</p>
-                    <span
-                      className={cn(
-                        'px-2 py-0.5 rounded-full text-xs font-medium',
-                        config.bg,
-                        config.color
-                      )}
-                    >
-                      {config.label}
-                    </span>
+              return (
+                <div
+                  key={transaction.id}
+                  className="flex items-center gap-4 p-4 rounded-lg bg-secondary/30 hover:bg-secondary/50 transition-colors animate-fade-in"
+                >
+                  <div className={cn('w-12 h-12 rounded-xl flex items-center justify-center', config?.bg)}>
+                    <Icon className={cn('w-6 h-6', config?.color)} />
                   </div>
-                  <p className="text-sm text-muted-foreground mt-0.5">
-                    {format(transaction.date, 'MMM dd, yyyy • HH:mm')}
-                    {transaction.notes && ` • ${transaction.notes}`}
-                  </p>
-                </div>
-                <div className="text-right">
-                  <p className={cn('text-lg font-semibold', config.color)}>
-                    {transaction.type === 'purchase' || transaction.type === 'debit' ? '-' : '+'}
-                    ₹{transaction.amount.toLocaleString()}
-                  </p>
-                  {transaction.quantity > 0 && (
-                    <p className="text-sm text-muted-foreground">
-                      {transaction.quantity}L × ₹{transaction.rate}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <p className="font-semibold text-foreground">{name}</p>
+                      <span
+                        className={cn(
+                          'px-2 py-0.5 rounded-full text-xs font-medium',
+                          config?.bg,
+                          config?.color
+                        )}
+                      >
+                        {config?.label}
+                      </span>
+                    </div>
+                    <p className="text-sm text-muted-foreground mt-0.5">
+                      {format(new Date(transaction.created_at), 'MMM dd, yyyy • HH:mm')}
+                      {transaction.notes && ` • ${transaction.notes}`}
                     </p>
-                  )}
+                  </div>
+                  <div className="text-right">
+                    <p className={cn('text-lg font-semibold', config?.color)}>
+                      {transaction.type === 'purchase' || transaction.type === 'debit' ? '-' : '+'}
+                      ₹{transaction.amount.toLocaleString('en-IN')}
+                    </p>
+                    {transaction.quantity > 0 && (
+                      <p className="text-sm text-muted-foreground">
+                        {transaction.quantity}L × ₹{transaction.rate}
+                      </p>
+                    )}
+                  </div>
                 </div>
-              </div>
-            );
-          })}
-        </div>
+              );
+            })}
+          </div>
+        )}
       </div>
     </MainLayout>
   );
