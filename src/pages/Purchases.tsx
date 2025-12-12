@@ -1,12 +1,12 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { mockCustomers } from '@/lib/mockData';
-import { Transaction } from '@/types';
+import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/hooks/useAuth';
 import { cn } from '@/lib/utils';
-import { Plus, ShoppingCart, Calendar } from 'lucide-react';
-import { format } from 'date-fns';
+import { Plus, ShoppingCart, Calendar, Loader2 } from 'lucide-react';
+import { format, startOfDay, endOfDay } from 'date-fns';
 import {
   Select,
   SelectContent,
@@ -17,20 +17,83 @@ import {
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 
+interface SupplierData {
+  id: string;
+  supplier_id: string;
+  name: string;
+}
+
+interface PurchaseData {
+  id: string;
+  supplier_id: string;
+  supplier_name: string;
+  quantity: number;
+  rate: number;
+  amount: number;
+  notes: string | null;
+  created_at: string;
+}
+
 export default function Purchases() {
-  const [purchases, setPurchases] = useState<Transaction[]>([]);
+  const [suppliers, setSuppliers] = useState<SupplierData[]>([]);
+  const [purchases, setPurchases] = useState<PurchaseData[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [formData, setFormData] = useState({
-    customerId: '',
+    supplierId: '',
     quantity: '',
     rate: '50',
     notes: '',
   });
   const { toast } = useToast();
+  const { user } = useAuth();
 
   const amount = parseFloat(formData.quantity || '0') * parseFloat(formData.rate || '0');
 
-  const handleAddPurchase = () => {
-    if (!formData.customerId || !formData.quantity || !formData.rate) {
+  useEffect(() => {
+    const fetchData = async () => {
+      // Fetch suppliers
+      const { data: suppData } = await supabase
+        .from('suppliers')
+        .select('id, supplier_id, name')
+        .order('name');
+      
+      if (suppData) setSuppliers(suppData);
+
+      // Fetch today's purchases
+      const today = new Date();
+      const { data: txData } = await supabase
+        .from('transactions')
+        .select(`
+          id, quantity, rate, amount, notes, created_at, supplier_id,
+          suppliers (name)
+        `)
+        .eq('type', 'purchase')
+        .gte('created_at', startOfDay(today).toISOString())
+        .lte('created_at', endOfDay(today).toISOString())
+        .order('created_at', { ascending: false });
+
+      if (txData) {
+        setPurchases(txData.map(tx => ({
+          id: tx.id,
+          supplier_id: tx.supplier_id || '',
+          supplier_name: tx.suppliers?.name || 'Unknown',
+          quantity: Number(tx.quantity),
+          rate: Number(tx.rate),
+          amount: Number(tx.amount),
+          notes: tx.notes,
+          created_at: tx.created_at,
+        })));
+      }
+
+      setIsLoading(false);
+    };
+
+    fetchData();
+  }, []);
+
+  const handleAddPurchase = async () => {
+    if (!formData.supplierId || !formData.quantity || !formData.rate) {
       toast({
         title: 'Error',
         description: 'Please fill in all required fields',
@@ -39,33 +102,67 @@ export default function Purchases() {
       return;
     }
 
-    const customer = mockCustomers.find((c) => c.id === formData.customerId);
-    if (!customer) return;
+    const supplier = suppliers.find((s) => s.id === formData.supplierId);
+    if (!supplier) return;
 
-    const newPurchase: Transaction = {
-      id: Date.now().toString(),
-      customerId: formData.customerId,
-      customerName: customer.name,
-      type: 'purchase',
-      quantity: parseFloat(formData.quantity),
-      rate: parseFloat(formData.rate),
-      amount: amount,
-      date: new Date(),
-      notes: formData.notes,
-    };
+    setIsSubmitting(true);
 
-    setPurchases([newPurchase, ...purchases]);
-    setFormData({
-      customerId: '',
-      quantity: '',
-      rate: '50',
-      notes: '',
-    });
-    toast({
-      title: 'Success',
-      description: 'Purchase recorded successfully',
-    });
+    const { data, error } = await supabase
+      .from('transactions')
+      .insert({
+        supplier_id: formData.supplierId,
+        type: 'purchase',
+        quantity: parseFloat(formData.quantity),
+        rate: parseFloat(formData.rate),
+        amount: amount,
+        notes: formData.notes || null,
+        created_by: user?.id,
+      })
+      .select()
+      .single();
+
+    if (error) {
+      toast({
+        title: 'Error',
+        description: 'Failed to record purchase',
+        variant: 'destructive',
+      });
+    } else {
+      setPurchases([{
+        id: data.id,
+        supplier_id: formData.supplierId,
+        supplier_name: supplier.name,
+        quantity: parseFloat(formData.quantity),
+        rate: parseFloat(formData.rate),
+        amount: amount,
+        notes: formData.notes || null,
+        created_at: data.created_at,
+      }, ...purchases]);
+      
+      setFormData({
+        supplierId: '',
+        quantity: '',
+        rate: '50',
+        notes: '',
+      });
+      toast({
+        title: 'Success',
+        description: 'Purchase recorded successfully',
+      });
+    }
+
+    setIsSubmitting(false);
   };
+
+  if (isLoading) {
+    return (
+      <MainLayout title="Purchases" subtitle="Record milk purchases from suppliers">
+        <div className="flex items-center justify-center py-12">
+          <Loader2 className="w-8 h-8 animate-spin text-primary" />
+        </div>
+      </MainLayout>
+    );
+  }
 
   return (
     <MainLayout title="Purchases" subtitle="Record milk purchases from suppliers">
@@ -86,16 +183,16 @@ export default function Purchases() {
             <div>
               <Label htmlFor="supplier">Supplier *</Label>
               <Select
-                value={formData.customerId}
-                onValueChange={(value) => setFormData({ ...formData, customerId: value })}
+                value={formData.supplierId}
+                onValueChange={(value) => setFormData({ ...formData, supplierId: value })}
               >
                 <SelectTrigger>
                   <SelectValue placeholder="Select supplier" />
                 </SelectTrigger>
                 <SelectContent>
-                  {mockCustomers.map((customer) => (
-                    <SelectItem key={customer.id} value={customer.id}>
-                      {customer.name}
+                  {suppliers.map((supplier) => (
+                    <SelectItem key={supplier.id} value={supplier.id}>
+                      {supplier.name} ({supplier.supplier_id})
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -139,13 +236,22 @@ export default function Purchases() {
               <div className="flex justify-between items-center">
                 <span className="text-muted-foreground">Total Amount</span>
                 <span className="text-2xl font-display font-bold text-foreground">
-                  ₹{amount.toLocaleString()}
+                  ₹{amount.toLocaleString('en-IN')}
                 </span>
               </div>
             </div>
 
-            <Button onClick={handleAddPurchase} className="w-full" variant="gradient">
-              <Plus className="w-4 h-4 mr-2" />
+            <Button 
+              onClick={handleAddPurchase} 
+              className="w-full" 
+              variant="gradient"
+              disabled={isSubmitting}
+            >
+              {isSubmitting ? (
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              ) : (
+                <Plus className="w-4 h-4 mr-2" />
+              )}
               Record Purchase
             </Button>
           </div>
@@ -178,15 +284,15 @@ export default function Purchases() {
                     <ShoppingCart className="w-5 h-5 text-destructive" />
                   </div>
                   <div className="flex-1">
-                    <p className="font-semibold text-foreground">{purchase.customerName}</p>
+                    <p className="font-semibold text-foreground">{purchase.supplier_name}</p>
                     <p className="text-sm text-muted-foreground">
-                      {format(purchase.date, 'HH:mm')}
+                      {format(new Date(purchase.created_at), 'HH:mm')}
                       {purchase.notes && ` • ${purchase.notes}`}
                     </p>
                   </div>
                   <div className="text-right">
                     <p className="font-semibold text-destructive">
-                      -₹{purchase.amount.toLocaleString()}
+                      -₹{purchase.amount.toLocaleString('en-IN')}
                     </p>
                     <p className="text-sm text-muted-foreground">
                       {purchase.quantity}L × ₹{purchase.rate}
@@ -198,7 +304,7 @@ export default function Purchases() {
                 <div className="flex justify-between items-center">
                   <span className="font-medium text-foreground">Total Purchased Today</span>
                   <span className="text-xl font-display font-bold text-destructive">
-                    ₹{purchases.reduce((sum, p) => sum + p.amount, 0).toLocaleString()}
+                    ₹{purchases.reduce((sum, p) => sum + p.amount, 0).toLocaleString('en-IN')}
                   </span>
                 </div>
               </div>

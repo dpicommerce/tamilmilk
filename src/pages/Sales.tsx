@@ -1,11 +1,11 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { mockCustomers } from '@/lib/mockData';
-import { Transaction } from '@/types';
-import { Plus, TrendingUp, Calendar } from 'lucide-react';
-import { format } from 'date-fns';
+import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/hooks/useAuth';
+import { Plus, TrendingUp, Calendar, Loader2 } from 'lucide-react';
+import { format, startOfDay, endOfDay } from 'date-fns';
 import {
   Select,
   SelectContent,
@@ -16,8 +16,28 @@ import {
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 
+interface CustomerData {
+  id: string;
+  customer_id: string;
+  name: string;
+}
+
+interface SaleData {
+  id: string;
+  customer_id: string;
+  customer_name: string;
+  quantity: number;
+  rate: number;
+  amount: number;
+  notes: string | null;
+  created_at: string;
+}
+
 export default function Sales() {
-  const [sales, setSales] = useState<Transaction[]>([]);
+  const [customers, setCustomers] = useState<CustomerData[]>([]);
+  const [sales, setSales] = useState<SaleData[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [formData, setFormData] = useState({
     customerId: '',
     quantity: '',
@@ -25,10 +45,53 @@ export default function Sales() {
     notes: '',
   });
   const { toast } = useToast();
+  const { user } = useAuth();
 
   const amount = parseFloat(formData.quantity || '0') * parseFloat(formData.rate || '0');
 
-  const handleAddSale = () => {
+  useEffect(() => {
+    const fetchData = async () => {
+      // Fetch customers
+      const { data: custData } = await supabase
+        .from('customers')
+        .select('id, customer_id, name')
+        .order('name');
+      
+      if (custData) setCustomers(custData);
+
+      // Fetch today's sales
+      const today = new Date();
+      const { data: txData } = await supabase
+        .from('transactions')
+        .select(`
+          id, quantity, rate, amount, notes, created_at, customer_id,
+          customers (name)
+        `)
+        .eq('type', 'sale')
+        .gte('created_at', startOfDay(today).toISOString())
+        .lte('created_at', endOfDay(today).toISOString())
+        .order('created_at', { ascending: false });
+
+      if (txData) {
+        setSales(txData.map(tx => ({
+          id: tx.id,
+          customer_id: tx.customer_id || '',
+          customer_name: tx.customers?.name || 'Unknown',
+          quantity: Number(tx.quantity),
+          rate: Number(tx.rate),
+          amount: Number(tx.amount),
+          notes: tx.notes,
+          created_at: tx.created_at,
+        })));
+      }
+
+      setIsLoading(false);
+    };
+
+    fetchData();
+  }, []);
+
+  const handleAddSale = async () => {
     if (!formData.customerId || !formData.quantity || !formData.rate) {
       toast({
         title: 'Error',
@@ -38,33 +101,67 @@ export default function Sales() {
       return;
     }
 
-    const customer = mockCustomers.find((c) => c.id === formData.customerId);
+    const customer = customers.find((c) => c.id === formData.customerId);
     if (!customer) return;
 
-    const newSale: Transaction = {
-      id: Date.now().toString(),
-      customerId: formData.customerId,
-      customerName: customer.name,
-      type: 'sale',
-      quantity: parseFloat(formData.quantity),
-      rate: parseFloat(formData.rate),
-      amount: amount,
-      date: new Date(),
-      notes: formData.notes,
-    };
+    setIsSubmitting(true);
 
-    setSales([newSale, ...sales]);
-    setFormData({
-      customerId: '',
-      quantity: '',
-      rate: '60',
-      notes: '',
-    });
-    toast({
-      title: 'Success',
-      description: 'Sale recorded successfully',
-    });
+    const { data, error } = await supabase
+      .from('transactions')
+      .insert({
+        customer_id: formData.customerId,
+        type: 'sale',
+        quantity: parseFloat(formData.quantity),
+        rate: parseFloat(formData.rate),
+        amount: amount,
+        notes: formData.notes || null,
+        created_by: user?.id,
+      })
+      .select()
+      .single();
+
+    if (error) {
+      toast({
+        title: 'Error',
+        description: 'Failed to record sale',
+        variant: 'destructive',
+      });
+    } else {
+      setSales([{
+        id: data.id,
+        customer_id: formData.customerId,
+        customer_name: customer.name,
+        quantity: parseFloat(formData.quantity),
+        rate: parseFloat(formData.rate),
+        amount: amount,
+        notes: formData.notes || null,
+        created_at: data.created_at,
+      }, ...sales]);
+      
+      setFormData({
+        customerId: '',
+        quantity: '',
+        rate: '60',
+        notes: '',
+      });
+      toast({
+        title: 'Success',
+        description: 'Sale recorded successfully',
+      });
+    }
+
+    setIsSubmitting(false);
   };
+
+  if (isLoading) {
+    return (
+      <MainLayout title="Sales" subtitle="Record milk sales to customers">
+        <div className="flex items-center justify-center py-12">
+          <Loader2 className="w-8 h-8 animate-spin text-primary" />
+        </div>
+      </MainLayout>
+    );
+  }
 
   return (
     <MainLayout title="Sales" subtitle="Record milk sales to customers">
@@ -92,9 +189,9 @@ export default function Sales() {
                   <SelectValue placeholder="Select customer" />
                 </SelectTrigger>
                 <SelectContent>
-                  {mockCustomers.map((customer) => (
+                  {customers.map((customer) => (
                     <SelectItem key={customer.id} value={customer.id}>
-                      {customer.name}
+                      {customer.name} ({customer.customer_id})
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -138,13 +235,22 @@ export default function Sales() {
               <div className="flex justify-between items-center">
                 <span className="text-muted-foreground">Total Amount</span>
                 <span className="text-2xl font-display font-bold text-accent">
-                  ₹{amount.toLocaleString()}
+                  ₹{amount.toLocaleString('en-IN')}
                 </span>
               </div>
             </div>
 
-            <Button onClick={handleAddSale} className="w-full" variant="accent">
-              <Plus className="w-4 h-4 mr-2" />
+            <Button 
+              onClick={handleAddSale} 
+              className="w-full" 
+              variant="accent"
+              disabled={isSubmitting}
+            >
+              {isSubmitting ? (
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              ) : (
+                <Plus className="w-4 h-4 mr-2" />
+              )}
               Record Sale
             </Button>
           </div>
@@ -177,14 +283,14 @@ export default function Sales() {
                     <TrendingUp className="w-5 h-5 text-success" />
                   </div>
                   <div className="flex-1">
-                    <p className="font-semibold text-foreground">{sale.customerName}</p>
+                    <p className="font-semibold text-foreground">{sale.customer_name}</p>
                     <p className="text-sm text-muted-foreground">
-                      {format(sale.date, 'HH:mm')}
+                      {format(new Date(sale.created_at), 'HH:mm')}
                       {sale.notes && ` • ${sale.notes}`}
                     </p>
                   </div>
                   <div className="text-right">
-                    <p className="font-semibold text-success">+₹{sale.amount.toLocaleString()}</p>
+                    <p className="font-semibold text-success">+₹{sale.amount.toLocaleString('en-IN')}</p>
                     <p className="text-sm text-muted-foreground">
                       {sale.quantity}L × ₹{sale.rate}
                     </p>
@@ -195,7 +301,7 @@ export default function Sales() {
                 <div className="flex justify-between items-center">
                   <span className="font-medium text-foreground">Total Sales Today</span>
                   <span className="text-xl font-display font-bold text-success">
-                    ₹{sales.reduce((sum, s) => sum + s.amount, 0).toLocaleString()}
+                    ₹{sales.reduce((sum, s) => sum + s.amount, 0).toLocaleString('en-IN')}
                   </span>
                 </div>
               </div>

@@ -18,6 +18,7 @@ const navItems = [
   { icon: ShoppingCart, label: 'Purchases', path: '/purchases' },
   { icon: TrendingUp, label: 'Sales', path: '/sales' },
   { icon: Users, label: 'Customers', path: '/customers' },
+  { icon: Milk, label: 'Suppliers', path: '/suppliers' },
   { icon: CreditCard, label: 'Transactions', path: '/transactions' },
   { icon: FileText, label: 'Reports', path: '/reports' },
   { icon: Settings, label: 'Settings', path: '/settings' },
