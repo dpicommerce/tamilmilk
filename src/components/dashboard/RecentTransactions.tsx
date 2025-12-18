@@ -58,7 +58,7 @@ export function RecentTransactions({ transactions }: RecentTransactionsProps) {
                   {transaction.customerName}
                 </p>
                 <p className="text-sm text-muted-foreground">
-                  {config.label} • {format(transaction.date, 'MMM dd, HH:mm')}
+                  {config.label} • {format(transaction.date, 'MMM dd, h:mm a')}
                 </p>
               </div>
               <div className="text-right">
