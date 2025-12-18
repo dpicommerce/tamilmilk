@@ -1,0 +1,293 @@
+import { useEffect, useState } from 'react';
+import { supabase } from '@/integrations/supabase/client';
+import { format, startOfMonth, endOfMonth } from 'date-fns';
+import { Loader2, User, Truck, IndianRupee, Calendar } from 'lucide-react';
+import { cn } from '@/lib/utils';
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+} from '@/components/ui/sheet';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+
+interface TransactionDetailSheetProps {
+  isOpen: boolean;
+  onClose: () => void;
+  entity: {
+    id: string;
+    name: string;
+    type: 'customer' | 'supplier';
+    milk_rate: number;
+    balance: number;
+  } | null;
+}
+
+interface Transaction {
+  id: string;
+  type: string;
+  quantity: number;
+  rate: number;
+  amount: number;
+  created_at: string;
+  notes: string | null;
+}
+
+interface PeriodSummary {
+  period: string;
+  startDate: Date;
+  endDate: Date;
+  totalQuantity: number;
+  totalAmount: number;
+  creditAmount: number;
+  debitAmount: number;
+  transactions: Transaction[];
+}
+
+export function TransactionDetailSheet({ isOpen, onClose, entity }: TransactionDetailSheetProps) {
+  const [isLoading, setIsLoading] = useState(false);
+  const [periodSummaries, setPeriodSummaries] = useState<PeriodSummary[]>([]);
+  const [selectedMonth, setSelectedMonth] = useState(new Date());
+
+  useEffect(() => {
+    if (isOpen && entity) {
+      fetchTransactions();
+    }
+  }, [isOpen, entity, selectedMonth]);
+
+  const fetchTransactions = async () => {
+    if (!entity) return;
+    setIsLoading(true);
+
+    const monthStart = startOfMonth(selectedMonth);
+    const monthEnd = endOfMonth(selectedMonth);
+
+    const filterColumn = entity.type === 'customer' ? 'customer_id' : 'supplier_id';
+    
+    const { data } = await supabase
+      .from('transactions')
+      .select('*')
+      .eq(filterColumn, entity.id)
+      .gte('created_at', monthStart.toISOString())
+      .lte('created_at', monthEnd.toISOString())
+      .order('created_at', { ascending: true });
+
+    if (data) {
+      // Split into 3 periods: 1-10, 11-20, 21-end
+      const periods: PeriodSummary[] = [
+        {
+          period: '1st - 10th',
+          startDate: new Date(monthStart.getFullYear(), monthStart.getMonth(), 1),
+          endDate: new Date(monthStart.getFullYear(), monthStart.getMonth(), 10),
+          totalQuantity: 0,
+          totalAmount: 0,
+          creditAmount: 0,
+          debitAmount: 0,
+          transactions: [],
+        },
+        {
+          period: '11th - 20th',
+          startDate: new Date(monthStart.getFullYear(), monthStart.getMonth(), 11),
+          endDate: new Date(monthStart.getFullYear(), monthStart.getMonth(), 20),
+          totalQuantity: 0,
+          totalAmount: 0,
+          creditAmount: 0,
+          debitAmount: 0,
+          transactions: [],
+        },
+        {
+          period: '21st - ' + format(monthEnd, 'd') + 'th',
+          startDate: new Date(monthStart.getFullYear(), monthStart.getMonth(), 21),
+          endDate: monthEnd,
+          totalQuantity: 0,
+          totalAmount: 0,
+          creditAmount: 0,
+          debitAmount: 0,
+          transactions: [],
+        },
+      ];
+
+      data.forEach((tx) => {
+        const txDate = new Date(tx.created_at);
+        const day = txDate.getDate();
+        let periodIndex = 0;
+        if (day >= 11 && day <= 20) periodIndex = 1;
+        else if (day >= 21) periodIndex = 2;
+
+        periods[periodIndex].transactions.push(tx);
+        
+        if (tx.type === 'sale' || tx.type === 'purchase') {
+          periods[periodIndex].totalQuantity += Number(tx.quantity);
+          periods[periodIndex].totalAmount += Number(tx.amount);
+        } else if (tx.type === 'credit') {
+          periods[periodIndex].creditAmount += Number(tx.amount);
+        } else if (tx.type === 'debit') {
+          periods[periodIndex].debitAmount += Number(tx.amount);
+        }
+      });
+
+      setPeriodSummaries(periods);
+    }
+
+    setIsLoading(false);
+  };
+
+  const getMonthOptions = () => {
+    const months = [];
+    for (let i = 0; i < 6; i++) {
+      const date = new Date();
+      date.setMonth(date.getMonth() - i);
+      months.push(date);
+    }
+    return months;
+  };
+
+  if (!entity) return null;
+
+  return (
+    <Sheet open={isOpen} onOpenChange={onClose}>
+      <SheetContent className="w-full sm:max-w-lg overflow-y-auto">
+        <SheetHeader>
+          <SheetTitle className="flex items-center gap-3">
+            <div className={cn(
+              "w-10 h-10 rounded-full flex items-center justify-center",
+              entity.type === 'customer' ? 'bg-primary/10' : 'bg-accent/10'
+            )}>
+              {entity.type === 'customer' ? (
+                <User className="w-5 h-5 text-primary" />
+              ) : (
+                <Truck className="w-5 h-5 text-accent" />
+              )}
+            </div>
+            <div>
+              <p className="text-lg font-semibold">{entity.name}</p>
+              <p className="text-sm text-muted-foreground flex items-center gap-1">
+                Rate: <IndianRupee className="w-3 h-3" />{Number(entity.milk_rate).toFixed(2)}/L
+              </p>
+            </div>
+          </SheetTitle>
+        </SheetHeader>
+
+        {/* Current Balance */}
+        <div className="mt-6 p-4 rounded-lg bg-secondary/50">
+          <p className="text-sm text-muted-foreground">Current Balance</p>
+          <p className={cn(
+            "text-2xl font-bold",
+            Number(entity.balance) >= 0 ? 'text-success' : 'text-destructive'
+          )}>
+            {Number(entity.balance) >= 0 ? '+' : ''}₹{Math.abs(Number(entity.balance)).toLocaleString('en-IN')}
+          </p>
+        </div>
+
+        {/* Month Selector */}
+        <div className="mt-6">
+          <label className="text-sm font-medium flex items-center gap-2 mb-2">
+            <Calendar className="w-4 h-4" />
+            Select Month
+          </label>
+          <select
+            value={format(selectedMonth, 'yyyy-MM')}
+            onChange={(e) => setSelectedMonth(new Date(e.target.value))}
+            className="w-full h-10 px-3 rounded-md border border-input bg-background text-sm"
+          >
+            {getMonthOptions().map((date) => (
+              <option key={format(date, 'yyyy-MM')} value={format(date, 'yyyy-MM')}>
+                {format(date, 'MMMM yyyy')}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        {/* Period-wise Summary */}
+        {isLoading ? (
+          <div className="flex items-center justify-center py-12">
+            <Loader2 className="w-6 h-6 animate-spin text-primary" />
+          </div>
+        ) : (
+          <Tabs defaultValue="0" className="mt-6">
+            <TabsList className="w-full grid grid-cols-3">
+              {periodSummaries.map((period, index) => (
+                <TabsTrigger key={index} value={String(index)} className="text-xs">
+                  {period.period}
+                </TabsTrigger>
+              ))}
+            </TabsList>
+            {periodSummaries.map((period, index) => (
+              <TabsContent key={index} value={String(index)} className="mt-4 space-y-4">
+                {/* Summary Cards */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="p-3 rounded-lg bg-primary/10">
+                    <p className="text-xs text-muted-foreground">Total Quantity</p>
+                    <p className="text-lg font-semibold text-primary">
+                      {period.totalQuantity.toFixed(1)} L
+                    </p>
+                  </div>
+                  <div className="p-3 rounded-lg bg-accent/10">
+                    <p className="text-xs text-muted-foreground">Total Amount</p>
+                    <p className="text-lg font-semibold text-accent">
+                      ₹{period.totalAmount.toLocaleString('en-IN')}
+                    </p>
+                  </div>
+                  <div className="p-3 rounded-lg bg-success/10">
+                    <p className="text-xs text-muted-foreground">Credit Received</p>
+                    <p className="text-lg font-semibold text-success">
+                      ₹{period.creditAmount.toLocaleString('en-IN')}
+                    </p>
+                  </div>
+                  <div className="p-3 rounded-lg bg-warning/10">
+                    <p className="text-xs text-muted-foreground">Debit/Advance</p>
+                    <p className="text-lg font-semibold text-warning">
+                      ₹{period.debitAmount.toLocaleString('en-IN')}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Transaction List */}
+                <div className="space-y-2">
+                  <p className="text-sm font-medium">Transactions</p>
+                  {period.transactions.length === 0 ? (
+                    <p className="text-sm text-muted-foreground text-center py-4">
+                      No transactions in this period
+                    </p>
+                  ) : (
+                    period.transactions.map((tx) => (
+                      <div
+                        key={tx.id}
+                        className="p-3 rounded-lg bg-secondary/30 flex items-center justify-between"
+                      >
+                        <div>
+                          <p className={cn(
+                            "text-sm font-medium capitalize",
+                            tx.type === 'credit' && 'text-success',
+                            tx.type === 'debit' && 'text-warning',
+                            tx.type === 'sale' && 'text-primary',
+                            tx.type === 'purchase' && 'text-accent'
+                          )}>
+                            {tx.type}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            {format(new Date(tx.created_at), 'dd MMM, h:mm a')}
+                          </p>
+                        </div>
+                        <div className="text-right">
+                          {(tx.type === 'sale' || tx.type === 'purchase') && (
+                            <p className="text-xs text-muted-foreground">
+                              {Number(tx.quantity)}L × ₹{Number(tx.rate)}
+                            </p>
+                          )}
+                          <p className="font-semibold">
+                            ₹{Number(tx.amount).toLocaleString('en-IN')}
+                          </p>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </TabsContent>
+            ))}
+          </Tabs>
+        )}
+      </SheetContent>
+    </Sheet>
+  );
+}

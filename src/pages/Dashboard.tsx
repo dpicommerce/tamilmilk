@@ -3,7 +3,9 @@ import { MainLayout } from '@/components/layout/MainLayout';
 import { StatCard } from '@/components/dashboard/StatCard';
 import { RecentTransactions } from '@/components/dashboard/RecentTransactions';
 import { QuickActions } from '@/components/dashboard/QuickActions';
-import { CustomerBalances } from '@/components/dashboard/CustomerBalances';
+import { CustomersList } from '@/components/dashboard/CustomersList';
+import { SuppliersList } from '@/components/dashboard/SuppliersList';
+import { TransactionDetailSheet } from '@/components/dashboard/TransactionDetailSheet';
 import { supabase } from '@/integrations/supabase/client';
 import { ShoppingCart, TrendingUp, CreditCard, Wallet, Loader2 } from 'lucide-react';
 import { format, startOfDay, endOfDay } from 'date-fns';
@@ -26,19 +28,39 @@ interface CustomerData {
   id: string;
   customer_id: string;
   name: string;
+  phone: string;
   balance: number;
+  milk_rate: number;
+}
+
+interface SupplierData {
+  id: string;
+  supplier_id: string;
+  name: string;
+  phone: string;
+  balance: number;
+  milk_rate: number;
 }
 
 export default function Dashboard() {
   const [isLoading, setIsLoading] = useState(true);
   const [transactions, setTransactions] = useState<TransactionData[]>([]);
   const [customers, setCustomers] = useState<CustomerData[]>([]);
+  const [suppliers, setSuppliers] = useState<SupplierData[]>([]);
   const [dailySummary, setDailySummary] = useState({
     totalPurchase: 0,
     totalSales: 0,
     totalCredit: 0,
     totalDebit: 0,
   });
+  const [selectedEntity, setSelectedEntity] = useState<{
+    id: string;
+    name: string;
+    type: 'customer' | 'supplier';
+    milk_rate: number;
+    balance: number;
+  } | null>(null);
+  const [isSheetOpen, setIsSheetOpen] = useState(false);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -74,15 +96,24 @@ export default function Dashboard() {
         setDailySummary(summary);
       }
 
-      // Fetch customers with balances
+      // Fetch all customers with balances
       const { data: custData } = await supabase
         .from('customers')
-        .select('id, customer_id, name, balance')
-        .order('balance', { ascending: false })
-        .limit(10);
+        .select('id, customer_id, name, phone, balance, milk_rate')
+        .order('name', { ascending: true });
 
       if (custData) {
         setCustomers(custData);
+      }
+
+      // Fetch all suppliers
+      const { data: suppData } = await supabase
+        .from('suppliers')
+        .select('id, supplier_id, name, phone, balance, milk_rate')
+        .order('name', { ascending: true });
+
+      if (suppData) {
+        setSuppliers(suppData);
       }
 
       setIsLoading(false);
@@ -104,15 +135,27 @@ export default function Dashboard() {
     notes: tx.notes || undefined,
   }));
 
-  const customerBalances = customers.map(c => ({
-    id: c.id,
-    customerId: c.customer_id,
-    name: c.name,
-    phone: '',
-    address: '',
-    balance: Number(c.balance),
-    createdAt: new Date(),
-  }));
+  const handleSelectCustomer = (customer: CustomerData) => {
+    setSelectedEntity({
+      id: customer.id,
+      name: customer.name,
+      type: 'customer',
+      milk_rate: customer.milk_rate,
+      balance: customer.balance,
+    });
+    setIsSheetOpen(true);
+  };
+
+  const handleSelectSupplier = (supplier: SupplierData) => {
+    setSelectedEntity({
+      id: supplier.id,
+      name: supplier.name,
+      type: 'supplier',
+      milk_rate: supplier.milk_rate,
+      balance: supplier.balance,
+    });
+    setIsSheetOpen(true);
+  };
 
   if (isLoading) {
     return (
@@ -130,7 +173,7 @@ export default function Dashboard() {
       subtitle={format(new Date(), 'EEEE, MMMM d, yyyy')}
     >
       {/* Stats Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-6 mb-6 sm:mb-8">
         <StatCard
           title="Today's Purchase"
           value={`₹${dailySummary.totalPurchase.toLocaleString('en-IN')}`}
@@ -157,16 +200,26 @@ export default function Dashboard() {
         />
       </div>
 
-      {/* Content Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2">
-          <RecentTransactions transactions={recentTransactions} />
-        </div>
-        <div className="space-y-6">
-          <QuickActions />
-          <CustomerBalances customers={customerBalances} />
-        </div>
+      {/* Quick Actions */}
+      <div className="mb-6">
+        <QuickActions />
       </div>
+
+      {/* Suppliers and Customers Lists */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+        <SuppliersList suppliers={suppliers} onSelectSupplier={handleSelectSupplier} />
+        <CustomersList customers={customers} onSelectCustomer={handleSelectCustomer} />
+      </div>
+
+      {/* Recent Transactions */}
+      <RecentTransactions transactions={recentTransactions} />
+
+      {/* Transaction Detail Sheet */}
+      <TransactionDetailSheet
+        isOpen={isSheetOpen}
+        onClose={() => setIsSheetOpen(false)}
+        entity={selectedEntity}
+      />
     </MainLayout>
   );
 }

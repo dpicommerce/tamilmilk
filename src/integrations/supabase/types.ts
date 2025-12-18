@@ -22,6 +22,7 @@ export type Database = {
           created_by: string | null
           customer_id: string
           id: string
+          milk_rate: number
           name: string
           phone: string
           updated_at: string
@@ -33,6 +34,7 @@ export type Database = {
           created_by?: string | null
           customer_id: string
           id?: string
+          milk_rate?: number
           name: string
           phone: string
           updated_at?: string
@@ -44,6 +46,7 @@ export type Database = {
           created_by?: string | null
           customer_id?: string
           id?: string
+          milk_rate?: number
           name?: string
           phone?: string
           updated_at?: string
@@ -84,6 +87,7 @@ export type Database = {
           created_at: string
           created_by: string | null
           id: string
+          milk_rate: number
           name: string
           phone: string
           supplier_id: string
@@ -95,6 +99,7 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           id?: string
+          milk_rate?: number
           name: string
           phone: string
           supplier_id: string
@@ -106,6 +111,7 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           id?: string
+          milk_rate?: number
           name?: string
           phone?: string
           supplier_id?: string
