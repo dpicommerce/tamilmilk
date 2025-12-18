@@ -24,6 +24,7 @@ interface SupplierData {
   phone: string;
   address: string | null;
   balance: number;
+  milk_rate: number;
   created_at: string;
 }
 
@@ -38,6 +39,7 @@ export default function Suppliers() {
     name: '',
     phone: '',
     address: '',
+    milk_rate: '',
   });
   const { toast } = useToast();
   const { isAdmin, user } = useAuth();
@@ -108,6 +110,7 @@ export default function Suppliers() {
         name: formData.name,
         phone: formData.phone,
         address: formData.address || null,
+        milk_rate: parseFloat(formData.milk_rate) || 0,
         created_by: user?.id,
       })
       .select()
@@ -124,7 +127,7 @@ export default function Suppliers() {
       });
     } else {
       setSuppliers([data, ...suppliers]);
-      setFormData({ name: '', phone: '', address: '' });
+      setFormData({ name: '', phone: '', address: '', milk_rate: '' });
       setIsDrawerOpen(false);
       fetchNextSupplierId();
       toast({
@@ -207,6 +210,18 @@ export default function Suppliers() {
                     value={formData.address}
                     onChange={(e) => setFormData({ ...formData, address: e.target.value })}
                     placeholder="Supplier address"
+                    className="h-12 text-base mt-1"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="milk_rate" className="text-base">Milk Rate (₹/L) *</Label>
+                  <Input
+                    id="milk_rate"
+                    type="number"
+                    step="0.01"
+                    value={formData.milk_rate}
+                    onChange={(e) => setFormData({ ...formData, milk_rate: e.target.value })}
+                    placeholder="e.g. 50.00"
                     className="h-12 text-base mt-1"
                   />
                 </div>
@@ -299,9 +314,10 @@ export default function Suppliers() {
                     {Number(supplier.balance) >= 0 ? '+' : ''}₹{Math.abs(Number(supplier.balance)).toLocaleString('en-IN')}
                   </p>
                 </div>
-                <p className="text-xs text-muted-foreground">
-                  Since {format(new Date(supplier.created_at), 'MMM yyyy')}
-                </p>
+                <div className="text-right">
+                  <span className="text-xs text-muted-foreground">Rate</span>
+                  <p className="font-semibold text-accent">₹{Number(supplier.milk_rate).toFixed(2)}/L</p>
+                </div>
               </div>
             </div>
           ))

@@ -24,6 +24,7 @@ interface CustomerData {
   phone: string;
   address: string | null;
   balance: number;
+  milk_rate: number;
   created_at: string;
 }
 
@@ -38,6 +39,7 @@ export default function Customers() {
     name: '',
     phone: '',
     address: '',
+    milk_rate: '',
   });
   const { toast } = useToast();
   const { isAdmin, user } = useAuth();
@@ -108,6 +110,7 @@ export default function Customers() {
         name: formData.name,
         phone: formData.phone,
         address: formData.address || null,
+        milk_rate: parseFloat(formData.milk_rate) || 0,
         created_by: user?.id,
       })
       .select()
@@ -124,7 +127,7 @@ export default function Customers() {
       });
     } else {
       setCustomers([data, ...customers]);
-      setFormData({ name: '', phone: '', address: '' });
+      setFormData({ name: '', phone: '', address: '', milk_rate: '' });
       setIsDrawerOpen(false);
       fetchNextCustomerId();
       toast({
@@ -207,6 +210,18 @@ export default function Customers() {
                     value={formData.address}
                     onChange={(e) => setFormData({ ...formData, address: e.target.value })}
                     placeholder="Customer address"
+                    className="h-12 text-base mt-1"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="milk_rate" className="text-base">Milk Rate (₹/L) *</Label>
+                  <Input
+                    id="milk_rate"
+                    type="number"
+                    step="0.01"
+                    value={formData.milk_rate}
+                    onChange={(e) => setFormData({ ...formData, milk_rate: e.target.value })}
+                    placeholder="e.g. 55.00"
                     className="h-12 text-base mt-1"
                   />
                 </div>
@@ -299,9 +314,10 @@ export default function Customers() {
                     {Number(customer.balance) >= 0 ? '+' : ''}₹{Math.abs(Number(customer.balance)).toLocaleString('en-IN')}
                   </p>
                 </div>
-                <p className="text-xs text-muted-foreground">
-                  Since {format(new Date(customer.created_at), 'MMM yyyy')}
-                </p>
+                <div className="text-right">
+                  <span className="text-xs text-muted-foreground">Rate</span>
+                  <p className="font-semibold text-primary">₹{Number(customer.milk_rate).toFixed(2)}/L</p>
+                </div>
               </div>
             </div>
           ))
