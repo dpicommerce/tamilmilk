@@ -7,7 +7,7 @@ import { CustomersList } from '@/components/dashboard/CustomersList';
 import { SuppliersList } from '@/components/dashboard/SuppliersList';
 import { TransactionDetailSheet } from '@/components/dashboard/TransactionDetailSheet';
 import { supabase } from '@/integrations/supabase/client';
-import { ShoppingCart, TrendingUp, CreditCard, Wallet, Loader2 } from 'lucide-react';
+import { ShoppingCart, TrendingUp, CreditCard, Wallet, Loader2, Users, Truck } from 'lucide-react';
 import { format, startOfDay, endOfDay } from 'date-fns';
 
 interface TransactionData {
@@ -173,6 +173,28 @@ export default function Dashboard() {
       subtitle={format(new Date(), 'EEEE, MMMM d, yyyy')}
     >
       {/* Stats Grid */}
+      <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-6 mb-6 sm:mb-8">
+        <StatCard
+          title="Total Suppliers"
+          value={suppliers.length}
+          icon={Truck}
+          variant="default"
+        />
+        <StatCard
+          title="Total Customers"
+          value={customers.length}
+          icon={Users}
+          variant="accent"
+        />
+        <StatCard
+          title="Total Receivable"
+          value={`₹${customers.reduce((sum, c) => sum + Number(c.balance), 0).toLocaleString('en-IN')}`}
+          icon={CreditCard}
+          variant="success"
+        />
+      </div>
+
+      {/* Daily Stats Grid */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-6 mb-6 sm:mb-8">
         <StatCard
           title="Today's Purchase"
