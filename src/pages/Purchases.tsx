@@ -21,6 +21,7 @@ interface SupplierData {
   id: string;
   supplier_id: string;
   name: string;
+  milk_rate: number;
 }
 
 interface PurchaseData {
@@ -52,10 +53,10 @@ export default function Purchases() {
 
   useEffect(() => {
     const fetchData = async () => {
-      // Fetch suppliers
+      // Fetch suppliers with milk rates
       const { data: suppData } = await supabase
         .from('suppliers')
-        .select('id, supplier_id, name')
+        .select('id, supplier_id, name, milk_rate')
         .order('name');
       
       if (suppData) setSuppliers(suppData);
@@ -184,7 +185,14 @@ export default function Purchases() {
               <Label htmlFor="supplier">Supplier *</Label>
               <Select
                 value={formData.supplierId}
-                onValueChange={(value) => setFormData({ ...formData, supplierId: value })}
+                onValueChange={(value) => {
+                  const selectedSupplier = suppliers.find(s => s.id === value);
+                  setFormData({ 
+                    ...formData, 
+                    supplierId: value,
+                    rate: selectedSupplier ? String(selectedSupplier.milk_rate || 50) : formData.rate
+                  });
+                }}
               >
                 <SelectTrigger>
                   <SelectValue placeholder="Select supplier" />
@@ -286,7 +294,7 @@ export default function Purchases() {
                   <div className="flex-1">
                     <p className="font-semibold text-foreground">{purchase.supplier_name}</p>
                     <p className="text-sm text-muted-foreground">
-                      {format(new Date(purchase.created_at), 'HH:mm')}
+                      {format(new Date(purchase.created_at), 'h:mm a')}
                       {purchase.notes && ` • ${purchase.notes}`}
                     </p>
                   </div>

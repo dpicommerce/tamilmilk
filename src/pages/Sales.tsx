@@ -20,11 +20,12 @@ interface CustomerData {
   id: string;
   customer_id: string;
   name: string;
+  milk_rate: number;
 }
 
 interface SaleData {
   id: string;
-  customer_id: string;
+  customer_id: string | null;
   customer_name: string;
   quantity: number;
   rate: number;
@@ -51,10 +52,10 @@ export default function Sales() {
 
   useEffect(() => {
     const fetchData = async () => {
-      // Fetch customers
+      // Fetch customers with their milk rates
       const { data: custData } = await supabase
         .from('customers')
-        .select('id, customer_id, name')
+        .select('id, customer_id, name, milk_rate')
         .order('name');
       
       if (custData) setCustomers(custData);
@@ -75,8 +76,8 @@ export default function Sales() {
       if (txData) {
         setSales(txData.map(tx => ({
           id: tx.id,
-          customer_id: tx.customer_id || '',
-          customer_name: tx.customers?.name || 'Unknown',
+          customer_id: tx.customer_id || null,
+          customer_name: tx.customers?.name || 'Walk-in Customer',
           quantity: Number(tx.quantity),
           rate: Number(tx.rate),
           amount: Number(tx.amount),
@@ -92,24 +93,24 @@ export default function Sales() {
   }, []);
 
   const handleAddSale = async () => {
-    if (!formData.customerId || !formData.quantity || !formData.rate) {
+    if (!formData.quantity || !formData.rate) {
       toast({
         title: 'Error',
-        description: 'Please fill in all required fields',
+        description: 'Please enter quantity and rate',
         variant: 'destructive',
       });
       return;
     }
 
-    const customer = customers.find((c) => c.id === formData.customerId);
-    if (!customer) return;
+    const customer = formData.customerId ? customers.find((c) => c.id === formData.customerId) : null;
+    const customerName = customer ? customer.name : 'Walk-in Customer';
 
     setIsSubmitting(true);
 
     const { data, error } = await supabase
       .from('transactions')
       .insert({
-        customer_id: formData.customerId,
+        customer_id: formData.customerId || null,
         type: 'sale',
         quantity: parseFloat(formData.quantity),
         rate: parseFloat(formData.rate),
@@ -129,8 +130,8 @@ export default function Sales() {
     } else {
       setSales([{
         id: data.id,
-        customer_id: formData.customerId,
-        customer_name: customer.name,
+        customer_id: formData.customerId || null,
+        customer_name: customerName,
         quantity: parseFloat(formData.quantity),
         rate: parseFloat(formData.rate),
         amount: amount,
@@ -180,15 +181,23 @@ export default function Sales() {
 
           <div className="space-y-4">
             <div>
-              <Label htmlFor="customer">Customer *</Label>
+              <Label htmlFor="customer">Customer (Optional - Leave empty for walk-in)</Label>
               <Select
                 value={formData.customerId}
-                onValueChange={(value) => setFormData({ ...formData, customerId: value })}
+                onValueChange={(value) => {
+                  const selectedCustomer = customers.find(c => c.id === value);
+                  setFormData({ 
+                    ...formData, 
+                    customerId: value,
+                    rate: selectedCustomer ? String(selectedCustomer.milk_rate || 60) : formData.rate
+                  });
+                }}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="Select customer" />
+                  <SelectValue placeholder="Walk-in Customer" />
                 </SelectTrigger>
                 <SelectContent>
+                  <SelectItem value="">Walk-in Customer</SelectItem>
                   {customers.map((customer) => (
                     <SelectItem key={customer.id} value={customer.id}>
                       {customer.name} ({customer.customer_id})
@@ -285,7 +294,7 @@ export default function Sales() {
                   <div className="flex-1">
                     <p className="font-semibold text-foreground">{sale.customer_name}</p>
                     <p className="text-sm text-muted-foreground">
-                      {format(new Date(sale.created_at), 'HH:mm')}
+                      {format(new Date(sale.created_at), 'h:mm a')}
                       {sale.notes && ` • ${sale.notes}`}
                     </p>
                   </div>

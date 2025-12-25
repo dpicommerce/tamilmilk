@@ -24,7 +24,7 @@ export type Database = {
           id: string
           milk_rate: number
           name: string
-          phone: string
+          phone: string | null
           updated_at: string
         }
         Insert: {
@@ -36,7 +36,7 @@ export type Database = {
           id?: string
           milk_rate?: number
           name: string
-          phone: string
+          phone?: string | null
           updated_at?: string
         }
         Update: {
@@ -48,7 +48,7 @@ export type Database = {
           id?: string
           milk_rate?: number
           name?: string
-          phone?: string
+          phone?: string | null
           updated_at?: string
         }
         Relationships: []
@@ -89,7 +89,7 @@ export type Database = {
           id: string
           milk_rate: number
           name: string
-          phone: string
+          phone: string | null
           supplier_id: string
           updated_at: string
         }
@@ -101,7 +101,7 @@ export type Database = {
           id?: string
           milk_rate?: number
           name: string
-          phone: string
+          phone?: string | null
           supplier_id: string
           updated_at?: string
         }
@@ -113,7 +113,7 @@ export type Database = {
           id?: string
           milk_rate?: number
           name?: string
-          phone?: string
+          phone?: string | null
           supplier_id?: string
           updated_at?: string
         }
