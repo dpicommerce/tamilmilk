@@ -13,7 +13,7 @@ interface StatCardProps {
 }
 
 const variantStyles = {
-  default: 'bg-card',
+  default: 'stat-card-gradient text-card-foreground',
   primary: 'bg-primary text-primary-foreground',
   accent: 'bg-accent text-accent-foreground',
   success: 'bg-success text-success-foreground',
@@ -23,9 +23,9 @@ const variantStyles = {
 const iconVariantStyles = {
   default: 'bg-primary/10 text-primary',
   primary: 'bg-primary-foreground/20 text-primary-foreground',
-  accent: 'bg-accent-foreground/20 text-accent-foreground',
-  success: 'bg-success-foreground/20 text-success-foreground',
-  warning: 'bg-warning-foreground/20 text-warning-foreground',
+  accent: 'bg-primary-foreground/20 text-accent-foreground',
+  success: 'bg-primary-foreground/20 text-success-foreground',
+  warning: 'bg-primary-foreground/20 text-warning-foreground',
 };
 
 export function StatCard({ title, value, icon: Icon, trend, variant = 'default' }: StatCardProps) {

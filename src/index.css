@@ -176,7 +176,11 @@
 
 @layer components {
   .stat-card {
-    @apply bg-card rounded-xl p-6 shadow-[var(--shadow-card)] border border-border/50;
+    @apply rounded-xl p-6 shadow-[var(--shadow-card)] border border-border/50;
+  }
+
+  .stat-card-gradient {
+    @apply bg-card;
     background: var(--gradient-card);
   }
 
