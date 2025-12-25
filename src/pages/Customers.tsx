@@ -21,7 +21,7 @@ interface CustomerData {
   id: string;
   customer_id: string;
   name: string;
-  phone: string;
+  phone: string | null;
   address: string | null;
   balance: number;
   milk_rate: number;
@@ -83,10 +83,10 @@ export default function Customers() {
   );
 
   const handleAddCustomer = async () => {
-    if (!formData.name || !formData.phone) {
+    if (!formData.name) {
       toast({
         title: 'Error',
-        description: 'Please fill in all required fields',
+        description: 'Please enter customer name',
         variant: 'destructive',
       });
       return;
@@ -108,7 +108,7 @@ export default function Customers() {
       .insert({
         customer_id: nextCustomerId,
         name: formData.name,
-        phone: formData.phone,
+        phone: formData.phone || null,
         address: formData.address || null,
         milk_rate: parseFloat(formData.milk_rate) || 0,
         created_by: user?.id,
@@ -193,7 +193,7 @@ export default function Customers() {
                   />
                 </div>
                 <div>
-                  <Label htmlFor="phone" className="text-base">Mobile Number *</Label>
+                  <Label htmlFor="phone" className="text-base">Mobile Number (Optional)</Label>
                   <Input
                     id="phone"
                     type="tel"
@@ -289,10 +289,12 @@ export default function Customers() {
 
               {/* Contact Info */}
               <div className="mt-3 space-y-1.5">
-                <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <Phone className="w-4 h-4 flex-shrink-0" />
-                  <span className="truncate">{customer.phone}</span>
-                </div>
+                {customer.phone && (
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <Phone className="w-4 h-4 flex-shrink-0" />
+                    <span className="truncate">{customer.phone}</span>
+                  </div>
+                )}
                 {customer.address && (
                   <div className="flex items-center gap-2 text-sm text-muted-foreground">
                     <MapPin className="w-4 h-4 flex-shrink-0" />

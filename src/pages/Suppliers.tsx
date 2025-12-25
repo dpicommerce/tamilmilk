@@ -21,7 +21,7 @@ interface SupplierData {
   id: string;
   supplier_id: string;
   name: string;
-  phone: string;
+  phone: string | null;
   address: string | null;
   balance: number;
   milk_rate: number;
@@ -83,10 +83,10 @@ export default function Suppliers() {
   );
 
   const handleAddSupplier = async () => {
-    if (!formData.name || !formData.phone) {
+    if (!formData.name) {
       toast({
         title: 'Error',
-        description: 'Please fill in all required fields',
+        description: 'Please enter supplier name',
         variant: 'destructive',
       });
       return;
@@ -108,7 +108,7 @@ export default function Suppliers() {
       .insert({
         supplier_id: nextSupplierId,
         name: formData.name,
-        phone: formData.phone,
+        phone: formData.phone || null,
         address: formData.address || null,
         milk_rate: parseFloat(formData.milk_rate) || 0,
         created_by: user?.id,
@@ -193,7 +193,7 @@ export default function Suppliers() {
                   />
                 </div>
                 <div>
-                  <Label htmlFor="phone" className="text-base">Mobile Number *</Label>
+                  <Label htmlFor="phone" className="text-base">Mobile Number (Optional)</Label>
                   <Input
                     id="phone"
                     type="tel"
@@ -289,10 +289,12 @@ export default function Suppliers() {
 
               {/* Contact Info */}
               <div className="mt-3 space-y-1.5">
-                <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <Phone className="w-4 h-4 flex-shrink-0" />
-                  <span className="truncate">{supplier.phone}</span>
-                </div>
+                {supplier.phone && (
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <Phone className="w-4 h-4 flex-shrink-0" />
+                    <span className="truncate">{supplier.phone}</span>
+                  </div>
+                )}
                 {supplier.address && (
                   <div className="flex items-center gap-2 text-sm text-muted-foreground">
                     <MapPin className="w-4 h-4 flex-shrink-0" />
