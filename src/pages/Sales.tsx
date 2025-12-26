@@ -182,29 +182,30 @@ export default function Sales() {
           <div className="space-y-4">
             <div>
               <Label htmlFor="customer">Customer (Optional - Leave empty for walk-in)</Label>
-              <Select
-                value={formData.customerId}
-                onValueChange={(value) => {
-                  const selectedCustomer = customers.find(c => c.id === value);
-                  setFormData({ 
-                    ...formData, 
-                    customerId: value,
-                    rate: selectedCustomer ? String(selectedCustomer.milk_rate || 60) : formData.rate
-                  });
-                }}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Walk-in Customer" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="">Walk-in Customer</SelectItem>
-                  {customers.map((customer) => (
-                    <SelectItem key={customer.id} value={customer.id}>
-                      {customer.name} ({customer.customer_id})
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+            <Select
+              value={formData.customerId || "walk-in"}
+              onValueChange={(value) => {
+                const isWalkIn = value === "walk-in";
+                const selectedCustomer = !isWalkIn ? customers.find(c => c.id === value) : null;
+                setFormData({ 
+                  ...formData, 
+                  customerId: isWalkIn ? '' : value,
+                  rate: selectedCustomer ? String(selectedCustomer.milk_rate || 60) : formData.rate
+                });
+              }}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Walk-in Customer" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="walk-in">Walk-in Customer</SelectItem>
+                {customers.map((customer) => (
+                  <SelectItem key={customer.id} value={customer.id}>
+                    {customer.name} ({customer.customer_id})
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
             </div>
 
             <div className="grid grid-cols-2 gap-4">
