@@ -53,6 +53,36 @@ export type Database = {
         }
         Relationships: []
       }
+      deleted_records: {
+        Row: {
+          deleted_at: string
+          deleted_by: string | null
+          deletion_reason: string
+          id: string
+          record_data: Json
+          record_id: string
+          table_name: string
+        }
+        Insert: {
+          deleted_at?: string
+          deleted_by?: string | null
+          deletion_reason: string
+          id?: string
+          record_data: Json
+          record_id: string
+          table_name: string
+        }
+        Update: {
+          deleted_at?: string
+          deleted_by?: string | null
+          deletion_reason?: string
+          id?: string
+          record_data?: Json
+          record_id?: string
+          table_name?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           created_at: string

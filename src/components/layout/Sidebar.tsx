@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { NavLink } from 'react-router-dom';
 import { cn } from '@/lib/utils';
+import { useAuth } from '@/hooks/useAuth';
 import {
   LayoutDashboard,
   ShoppingCart,
@@ -11,6 +12,7 @@ import {
   ChevronLeft,
   Milk,
   CreditCard,
+  Trash2,
 } from 'lucide-react';
 
 const navItems = [
@@ -24,8 +26,15 @@ const navItems = [
   { icon: Settings, label: 'Settings', path: '/settings' },
 ];
 
+const adminItems = [
+  { icon: Trash2, label: 'Deleted Records', path: '/deleted-records' },
+];
+
 export function Sidebar() {
   const [collapsed, setCollapsed] = useState(false);
+  const { isAdmin } = useAuth();
+
+  const allNavItems = isAdmin ? [...navItems, ...adminItems] : navItems;
 
   return (
     <aside
@@ -50,8 +59,8 @@ export function Sidebar() {
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 py-6 px-3 space-y-1">
-        {navItems.map((item) => (
+      <nav className="flex-1 py-6 px-3 space-y-1 overflow-y-auto">
+        {allNavItems.map((item) => (
           <NavLink
             key={item.path}
             to={item.path}

@@ -16,6 +16,7 @@ import {
 } from '@/components/ui/drawer';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
+import { DeleteConfirmDialog } from '@/components/DeleteConfirmDialog';
 
 interface CustomerData {
   id: string;
@@ -35,6 +36,8 @@ export default function Customers() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [nextCustomerId, setNextCustomerId] = useState('CUST001');
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [customerToDelete, setCustomerToDelete] = useState<CustomerData | null>(null);
   const [formData, setFormData] = useState({
     name: '',
     phone: '',
@@ -78,9 +81,56 @@ export default function Customers() {
   const filteredCustomers = customers.filter(
     (customer) =>
       customer.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      customer.phone.includes(searchQuery) ||
+      (customer.phone && customer.phone.includes(searchQuery)) ||
       customer.customer_id.toLowerCase().includes(searchQuery.toLowerCase())
   );
+
+  const handleDeleteCustomer = async (reason: string) => {
+    if (!customerToDelete || !user) return;
+
+    // First, store the deleted record
+    const { error: auditError } = await supabase
+      .from('deleted_records')
+      .insert([{
+        table_name: 'customers' as const,
+        record_id: customerToDelete.id,
+        record_data: JSON.parse(JSON.stringify(customerToDelete)),
+        deletion_reason: reason,
+        deleted_by: user.id,
+      }]);
+
+    if (auditError) {
+      toast({
+        title: 'Error',
+        description: 'Failed to create audit record',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    // Then delete the customer
+    const { error: deleteError } = await supabase
+      .from('customers')
+      .delete()
+      .eq('id', customerToDelete.id);
+
+    if (deleteError) {
+      toast({
+        title: 'Error',
+        description: 'Failed to delete customer',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    setCustomers(customers.filter(c => c.id !== customerToDelete.id));
+    setDeleteDialogOpen(false);
+    setCustomerToDelete(null);
+    toast({
+      title: 'Success',
+      description: 'Customer deleted successfully',
+    });
+  };
 
   const handleAddCustomer = async () => {
     if (!formData.name) {
@@ -280,7 +330,15 @@ export default function Customers() {
                     <Button variant="ghost" size="icon" className="h-8 w-8">
                       <Edit className="w-4 h-4" />
                     </Button>
-                    <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive">
+                    <Button 
+                      variant="ghost" 
+                      size="icon" 
+                      className="h-8 w-8 text-destructive"
+                      onClick={() => {
+                        setCustomerToDelete(customer);
+                        setDeleteDialogOpen(true);
+                      }}
+                    >
                       <Trash2 className="w-4 h-4" />
                     </Button>
                   </div>
@@ -325,6 +383,15 @@ export default function Customers() {
           ))
         )}
       </div>
+
+      {/* Delete Confirmation Dialog */}
+      <DeleteConfirmDialog
+        open={deleteDialogOpen}
+        onOpenChange={setDeleteDialogOpen}
+        title="Delete Customer"
+        description={`Are you sure you want to delete "${customerToDelete?.name}"? This action cannot be undone.`}
+        onConfirm={handleDeleteCustomer}
+      />
     </MainLayout>
   );
 }
