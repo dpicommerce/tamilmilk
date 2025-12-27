@@ -15,6 +15,7 @@ import {
   Wallet,
   Download,
   Loader2,
+  Trash2,
 } from 'lucide-react';
 import { format } from 'date-fns';
 import {
@@ -33,6 +34,7 @@ import {
 } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
+import { DeleteConfirmDialog } from '@/components/DeleteConfirmDialog';
 
 interface TransactionData {
   id: string;
@@ -96,6 +98,8 @@ export default function Transactions() {
   const [searchQuery, setSearchQuery] = useState('');
   const [filterType, setFilterType] = useState<string>('all');
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [transactionToDelete, setTransactionToDelete] = useState<TransactionData | null>(null);
   const [formData, setFormData] = useState({
     entityId: '',
     entityType: 'customer' as 'customer' | 'supplier',
@@ -106,7 +110,7 @@ export default function Transactions() {
     notes: '',
   });
   const { toast } = useToast();
-  const { user } = useAuth();
+  const { user, isAdmin } = useAuth();
 
   useEffect(() => {
     const fetchData = async () => {
@@ -162,6 +166,51 @@ export default function Transactions() {
     const matchesType = filterType === 'all' || transaction.type === filterType;
     return matchesSearch && matchesType;
   });
+
+  const handleDeleteTransaction = async (reason: string) => {
+    if (!transactionToDelete || !user) return;
+
+    const { error: auditError } = await supabase
+      .from('deleted_records')
+      .insert([{
+        table_name: 'transactions' as const,
+        record_id: transactionToDelete.id,
+        record_data: JSON.parse(JSON.stringify(transactionToDelete)),
+        deletion_reason: reason,
+        deleted_by: user.id,
+      }]);
+
+    if (auditError) {
+      toast({
+        title: 'Error',
+        description: 'Failed to create audit record',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    const { error: deleteError } = await supabase
+      .from('transactions')
+      .delete()
+      .eq('id', transactionToDelete.id);
+
+    if (deleteError) {
+      toast({
+        title: 'Error',
+        description: 'Failed to delete transaction',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    setTransactions(transactions.filter(t => t.id !== transactionToDelete.id));
+    setDeleteDialogOpen(false);
+    setTransactionToDelete(null);
+    toast({
+      title: 'Success',
+      description: 'Transaction deleted successfully',
+    });
+  };
 
   const handleAddTransaction = async () => {
     if (!formData.entityId || !formData.amount) {
@@ -458,15 +507,30 @@ export default function Transactions() {
                       {transaction.notes && ` • ${transaction.notes}`}
                     </p>
                   </div>
-                  <div className="text-right">
-                    <p className={cn('text-lg font-semibold', config?.color)}>
-                      {transaction.type === 'purchase' || transaction.type === 'debit' ? '-' : '+'}
-                      ₹{transaction.amount.toLocaleString('en-IN')}
-                    </p>
-                    {transaction.quantity > 0 && (
-                      <p className="text-sm text-muted-foreground">
-                        {transaction.quantity}L × ₹{transaction.rate}
+                  <div className="text-right flex items-center gap-3">
+                    <div>
+                      <p className={cn('text-lg font-semibold', config?.color)}>
+                        {transaction.type === 'purchase' || transaction.type === 'debit' ? '-' : '+'}
+                        ₹{transaction.amount.toLocaleString('en-IN')}
                       </p>
+                      {transaction.quantity > 0 && (
+                        <p className="text-sm text-muted-foreground">
+                          {transaction.quantity}L × ₹{transaction.rate}
+                        </p>
+                      )}
+                    </div>
+                    {isAdmin && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 text-destructive"
+                        onClick={() => {
+                          setTransactionToDelete(transaction);
+                          setDeleteDialogOpen(true);
+                        }}
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
                     )}
                   </div>
                 </div>
@@ -475,6 +539,14 @@ export default function Transactions() {
           </div>
         )}
       </div>
+
+      <DeleteConfirmDialog
+        open={deleteDialogOpen}
+        onOpenChange={setDeleteDialogOpen}
+        title="Delete Transaction"
+        description={`Are you sure you want to delete this transaction of ₹${transactionToDelete?.amount.toLocaleString('en-IN')}? This action cannot be undone.`}
+        onConfirm={handleDeleteTransaction}
+      />
     </MainLayout>
   );
 }

@@ -16,6 +16,7 @@ import {
 } from '@/components/ui/drawer';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
+import { DeleteConfirmDialog } from '@/components/DeleteConfirmDialog';
 
 interface SupplierData {
   id: string;
@@ -35,6 +36,8 @@ export default function Suppliers() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [nextSupplierId, setNextSupplierId] = useState('SUPP001');
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [supplierToDelete, setSupplierToDelete] = useState<SupplierData | null>(null);
   const [formData, setFormData] = useState({
     name: '',
     phone: '',
@@ -78,9 +81,54 @@ export default function Suppliers() {
   const filteredSuppliers = suppliers.filter(
     (supplier) =>
       supplier.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      supplier.phone.includes(searchQuery) ||
+      (supplier.phone && supplier.phone.includes(searchQuery)) ||
       supplier.supplier_id.toLowerCase().includes(searchQuery.toLowerCase())
   );
+
+  const handleDeleteSupplier = async (reason: string) => {
+    if (!supplierToDelete || !user) return;
+
+    const { error: auditError } = await supabase
+      .from('deleted_records')
+      .insert([{
+        table_name: 'suppliers' as const,
+        record_id: supplierToDelete.id,
+        record_data: JSON.parse(JSON.stringify(supplierToDelete)),
+        deletion_reason: reason,
+        deleted_by: user.id,
+      }]);
+
+    if (auditError) {
+      toast({
+        title: 'Error',
+        description: 'Failed to create audit record',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    const { error: deleteError } = await supabase
+      .from('suppliers')
+      .delete()
+      .eq('id', supplierToDelete.id);
+
+    if (deleteError) {
+      toast({
+        title: 'Error',
+        description: 'Failed to delete supplier',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    setSuppliers(suppliers.filter(s => s.id !== supplierToDelete.id));
+    setDeleteDialogOpen(false);
+    setSupplierToDelete(null);
+    toast({
+      title: 'Success',
+      description: 'Supplier deleted successfully',
+    });
+  };
 
   const handleAddSupplier = async () => {
     if (!formData.name) {
@@ -280,7 +328,15 @@ export default function Suppliers() {
                     <Button variant="ghost" size="icon" className="h-8 w-8">
                       <Edit className="w-4 h-4" />
                     </Button>
-                    <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive">
+                    <Button 
+                      variant="ghost" 
+                      size="icon" 
+                      className="h-8 w-8 text-destructive"
+                      onClick={() => {
+                        setSupplierToDelete(supplier);
+                        setDeleteDialogOpen(true);
+                      }}
+                    >
                       <Trash2 className="w-4 h-4" />
                     </Button>
                   </div>
@@ -325,6 +381,14 @@ export default function Suppliers() {
           ))
         )}
       </div>
+
+      <DeleteConfirmDialog
+        open={deleteDialogOpen}
+        onOpenChange={setDeleteDialogOpen}
+        title="Delete Supplier"
+        description={`Are you sure you want to delete "${supplierToDelete?.name}"? This action cannot be undone.`}
+        onConfirm={handleDeleteSupplier}
+      />
     </MainLayout>
   );
 }
