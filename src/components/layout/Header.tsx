@@ -1,7 +1,8 @@
-import { Bell, Search, User, LogOut, Shield } from 'lucide-react';
+import { Bell, Search, User, LogOut, Shield, ArrowLeft } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useAuth } from '@/hooks/useAuth';
+import { useLocation, useNavigate } from 'react-router-dom';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -17,14 +18,29 @@ interface HeaderProps {
 
 export function Header({ title, subtitle }: HeaderProps) {
   const { user, isAdmin, signOut } = useAuth();
+  const location = useLocation();
+  const navigate = useNavigate();
+  const isDashboard = location.pathname === '/';
 
   return (
     <header className="bg-card border-b border-border px-4 sm:px-8 py-4 flex items-center justify-between sticky top-0 z-10">
-      <div>
-        <h1 className="text-xl sm:text-2xl font-display font-bold text-foreground">{title}</h1>
-        {subtitle && (
-          <p className="text-xs sm:text-sm text-muted-foreground mt-0.5">{subtitle}</p>
+      <div className="flex items-center gap-3">
+        {!isDashboard && (
+          <Button 
+            variant="ghost" 
+            size="icon" 
+            onClick={() => navigate('/')}
+            className="h-9 w-9"
+          >
+            <ArrowLeft className="w-5 h-5" />
+          </Button>
         )}
+        <div>
+          <h1 className="text-xl sm:text-2xl font-display font-bold text-foreground">{title}</h1>
+          {subtitle && (
+            <p className="text-xs sm:text-sm text-muted-foreground mt-0.5">{subtitle}</p>
+          )}
+        </div>
       </div>
 
       <div className="flex items-center gap-2 sm:gap-4">

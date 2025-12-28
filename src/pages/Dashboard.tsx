@@ -209,13 +209,13 @@ export default function Dashboard() {
           variant="accent"
         />
         <StatCard
-          title="Credit Received"
+          title="Payment Received"
           value={`₹${dailySummary.totalCredit.toLocaleString('en-IN')}`}
           icon={CreditCard}
           variant="success"
         />
         <StatCard
-          title="Debit Given"
+          title="Paid Amount"
           value={`₹${dailySummary.totalDebit.toLocaleString('en-IN')}`}
           icon={Wallet}
           variant="warning"
