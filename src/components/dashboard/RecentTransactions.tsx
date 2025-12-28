@@ -24,13 +24,13 @@ const typeConfig = {
     icon: CreditCard,
     color: 'text-primary',
     bg: 'bg-primary/10',
-    label: 'Credit',
+    label: 'Payment Received',
   },
   debit: {
     icon: Wallet,
     color: 'text-warning',
     bg: 'bg-warning/10',
-    label: 'Debit',
+    label: 'Paid',
   },
 };
 
