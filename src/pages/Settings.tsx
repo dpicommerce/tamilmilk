@@ -3,62 +3,158 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
-import { useState } from 'react';
-import { Settings as SettingsIcon, User, Bell, Shield, Database, Milk } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Settings as SettingsIcon, User, Bell, Shield, Database, Milk, Loader2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { useAuth } from '@/hooks/useAuth';
+import { supabase } from '@/integrations/supabase/client';
 
 export default function Settings() {
   const [notifications, setNotifications] = useState(true);
   const [emailAlerts, setEmailAlerts] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
+  const [defaultPurchaseRate, setDefaultPurchaseRate] = useState('35');
+  const [defaultSalesRate, setDefaultSalesRate] = useState('50');
   const { toast } = useToast();
+  const { isAdmin, user } = useAuth();
 
-  const handleSave = () => {
-    toast({
-      title: 'Settings saved',
-      description: 'Your preferences have been updated successfully.',
-    });
+  useEffect(() => {
+    const fetchSettings = async () => {
+      const { data, error } = await supabase
+        .from('settings')
+        .select('key, value')
+        .in('key', ['default_purchase_rate', 'default_sales_rate']);
+
+      if (data) {
+        data.forEach(setting => {
+          if (setting.key === 'default_purchase_rate') {
+            setDefaultPurchaseRate(setting.value);
+          } else if (setting.key === 'default_sales_rate') {
+            setDefaultSalesRate(setting.value);
+          }
+        });
+      }
+      setIsLoading(false);
+    };
+
+    fetchSettings();
+  }, []);
+
+  const handleSaveRates = async () => {
+    if (!isAdmin) {
+      toast({
+        title: 'Access Denied',
+        description: 'Only admins can update rates',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    setIsSaving(true);
+
+    // Update purchase rate
+    const { error: purchaseError } = await supabase
+      .from('settings')
+      .update({ value: defaultPurchaseRate, updated_by: user?.id, updated_at: new Date().toISOString() })
+      .eq('key', 'default_purchase_rate');
+
+    // Update sales rate
+    const { error: salesError } = await supabase
+      .from('settings')
+      .update({ value: defaultSalesRate, updated_by: user?.id, updated_at: new Date().toISOString() })
+      .eq('key', 'default_sales_rate');
+
+    if (purchaseError || salesError) {
+      toast({
+        title: 'Error',
+        description: 'Failed to update rates',
+        variant: 'destructive',
+      });
+    } else {
+      toast({
+        title: 'Success',
+        description: 'Default rates updated successfully',
+      });
+    }
+
+    setIsSaving(false);
   };
+
+  if (isLoading) {
+    return (
+      <MainLayout title="Settings" subtitle="Manage your account and preferences">
+        <div className="flex items-center justify-center py-12">
+          <Loader2 className="w-8 h-8 animate-spin text-primary" />
+        </div>
+      </MainLayout>
+    );
+  }
 
   return (
     <MainLayout title="Settings" subtitle="Manage your account and preferences">
       <div className="max-w-3xl space-y-6">
-        {/* Business Settings */}
+        {/* Business Settings - Default Rates */}
         <div className="stat-card animate-slide-up">
           <div className="flex items-center gap-3 mb-6">
             <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
               <Milk className="w-5 h-5 text-primary" />
             </div>
             <div>
-              <h3 className="font-display font-semibold text-lg">Business Settings</h3>
-              <p className="text-sm text-muted-foreground">Configure your dairy business details</p>
+              <h3 className="font-display font-semibold text-lg">Default Rates</h3>
+              <p className="text-sm text-muted-foreground">Set default milk purchase and sales rates</p>
             </div>
           </div>
 
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <Label htmlFor="businessName">Business Name</Label>
-                <Input id="businessName" defaultValue="MilkTrack Dairy" />
-              </div>
-              <div>
-                <Label htmlFor="phone">Phone Number</Label>
-                <Input id="phone" defaultValue="+91 98765 43210" />
-              </div>
-            </div>
-            <div>
-              <Label htmlFor="address">Address</Label>
-              <Input id="address" defaultValue="123 Dairy Lane, Mumbai" />
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
                 <Label htmlFor="defaultPurchaseRate">Default Purchase Rate (₹/L)</Label>
-                <Input id="defaultPurchaseRate" type="number" defaultValue="50" />
+                <Input 
+                  id="defaultPurchaseRate" 
+                  type="number" 
+                  step="0.01"
+                  value={defaultPurchaseRate}
+                  onChange={(e) => setDefaultPurchaseRate(e.target.value)}
+                  disabled={!isAdmin}
+                />
+                <p className="text-xs text-muted-foreground mt-1">Rate paid to suppliers</p>
               </div>
               <div>
                 <Label htmlFor="defaultSaleRate">Default Sale Rate (₹/L)</Label>
-                <Input id="defaultSaleRate" type="number" defaultValue="60" />
+                <Input 
+                  id="defaultSaleRate" 
+                  type="number" 
+                  step="0.01"
+                  value={defaultSalesRate}
+                  onChange={(e) => setDefaultSalesRate(e.target.value)}
+                  disabled={!isAdmin}
+                />
+                <p className="text-xs text-muted-foreground mt-1">Rate charged to customers</p>
               </div>
             </div>
+            {isAdmin && (
+              <Button 
+                onClick={handleSaveRates} 
+                variant="gradient" 
+                disabled={isSaving}
+                className="w-full"
+              >
+                {isSaving ? (
+                  <span className="flex items-center gap-2">
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Saving...
+                  </span>
+                ) : (
+                  'Save Default Rates'
+                )}
+              </Button>
+            )}
+            {!isAdmin && (
+              <p className="text-sm text-muted-foreground text-center">
+                Only admins can change default rates
+              </p>
+            )}
           </div>
         </div>
 
@@ -70,24 +166,18 @@ export default function Settings() {
             </div>
             <div>
               <h3 className="font-display font-semibold text-lg">Account Settings</h3>
-              <p className="text-sm text-muted-foreground">Manage your personal information</p>
+              <p className="text-sm text-muted-foreground">Your account information</p>
             </div>
           </div>
 
           <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label htmlFor="name">Full Name</Label>
-                <Input id="name" defaultValue="Admin User" />
-              </div>
-              <div>
-                <Label htmlFor="email">Email</Label>
-                <Input id="email" type="email" defaultValue="admin@milktrack.com" />
-              </div>
+            <div>
+              <Label>Email</Label>
+              <Input value={user?.email || ''} disabled />
             </div>
             <div>
-              <Label htmlFor="password">Change Password</Label>
-              <Input id="password" type="password" placeholder="Enter new password" />
+              <Label>Role</Label>
+              <Input value={isAdmin ? 'Admin' : 'User'} disabled />
             </div>
           </div>
         </div>
@@ -122,31 +212,24 @@ export default function Settings() {
           </div>
         </div>
 
-        {/* User Roles Notice */}
-        <div className="stat-card animate-slide-up border-primary/20" style={{ animationDelay: '0.3s' }}>
-          <div className="flex items-center gap-3 mb-4">
-            <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
-              <Shield className="w-5 h-5 text-primary" />
+        {/* Admin Info */}
+        {isAdmin && (
+          <div className="stat-card animate-slide-up border-primary/20" style={{ animationDelay: '0.3s' }}>
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
+                <Shield className="w-5 h-5 text-primary" />
+              </div>
+              <div>
+                <h3 className="font-display font-semibold text-lg">Admin Access</h3>
+                <p className="text-sm text-muted-foreground">You have full admin privileges</p>
+              </div>
             </div>
-            <div>
-              <h3 className="font-display font-semibold text-lg">Admin & User Roles</h3>
-              <p className="text-sm text-muted-foreground">Manage team access levels</p>
-            </div>
+
+            <p className="text-muted-foreground">
+              As an admin, you can manage customers, suppliers, transactions, and default rates.
+            </p>
           </div>
-
-          <p className="text-muted-foreground mb-4">
-            To enable user roles and team management with secure authentication, connect to a database backend.
-          </p>
-          <Button variant="outline">
-            <Database className="w-4 h-4 mr-2" />
-            Connect Database
-          </Button>
-        </div>
-
-        {/* Save Button */}
-        <Button onClick={handleSave} variant="gradient" size="lg" className="w-full">
-          Save Settings
-        </Button>
+        )}
       </div>
     </MainLayout>
   );

@@ -40,6 +40,7 @@ export default function Purchases() {
   const [purchases, setPurchases] = useState<PurchaseData[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [defaultRate, setDefaultRate] = useState('50');
   const [formData, setFormData] = useState({
     supplierId: '',
     quantity: '',
@@ -53,6 +54,18 @@ export default function Purchases() {
 
   useEffect(() => {
     const fetchData = async () => {
+      // Fetch default purchase rate from settings
+      const { data: settingsData } = await supabase
+        .from('settings')
+        .select('value')
+        .eq('key', 'default_purchase_rate')
+        .maybeSingle();
+
+      if (settingsData) {
+        setDefaultRate(settingsData.value);
+        setFormData(prev => ({ ...prev, rate: settingsData.value }));
+      }
+
       // Fetch suppliers with milk rates
       const { data: suppData } = await supabase
         .from('suppliers')
@@ -143,7 +156,7 @@ export default function Purchases() {
       setFormData({
         supplierId: '',
         quantity: '',
-        rate: '50',
+        rate: defaultRate,
         notes: '',
       });
       toast({
@@ -190,7 +203,7 @@ export default function Purchases() {
                   setFormData({ 
                     ...formData, 
                     supplierId: value,
-                    rate: selectedSupplier ? String(selectedSupplier.milk_rate || 50) : formData.rate
+                    rate: selectedSupplier?.milk_rate ? String(selectedSupplier.milk_rate) : defaultRate
                   });
                 }}
               >

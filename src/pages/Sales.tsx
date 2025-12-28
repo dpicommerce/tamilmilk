@@ -39,6 +39,7 @@ export default function Sales() {
   const [sales, setSales] = useState<SaleData[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [defaultRate, setDefaultRate] = useState('60');
   const [formData, setFormData] = useState({
     customerId: '',
     quantity: '',
@@ -52,6 +53,18 @@ export default function Sales() {
 
   useEffect(() => {
     const fetchData = async () => {
+      // Fetch default sales rate from settings
+      const { data: settingsData } = await supabase
+        .from('settings')
+        .select('value')
+        .eq('key', 'default_sales_rate')
+        .maybeSingle();
+
+      if (settingsData) {
+        setDefaultRate(settingsData.value);
+        setFormData(prev => ({ ...prev, rate: settingsData.value }));
+      }
+
       // Fetch customers with their milk rates
       const { data: custData } = await supabase
         .from('customers')
@@ -142,7 +155,7 @@ export default function Sales() {
       setFormData({
         customerId: '',
         quantity: '',
-        rate: '60',
+        rate: defaultRate,
         notes: '',
       });
       toast({
@@ -190,7 +203,7 @@ export default function Sales() {
                 setFormData({ 
                   ...formData, 
                   customerId: isWalkIn ? '' : value,
-                  rate: selectedCustomer ? String(selectedCustomer.milk_rate || 60) : formData.rate
+                  rate: selectedCustomer?.milk_rate ? String(selectedCustomer.milk_rate) : defaultRate
                 });
               }}
             >
