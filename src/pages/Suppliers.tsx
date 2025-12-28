@@ -33,12 +33,20 @@ export default function Suppliers() {
   const [suppliers, setSuppliers] = useState<SupplierData[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+  const [isEditDrawerOpen, setIsEditDrawerOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [nextSupplierId, setNextSupplierId] = useState('SUPP001');
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [supplierToDelete, setSupplierToDelete] = useState<SupplierData | null>(null);
+  const [supplierToEdit, setSupplierToEdit] = useState<SupplierData | null>(null);
   const [formData, setFormData] = useState({
+    name: '',
+    phone: '',
+    address: '',
+    milk_rate: '',
+  });
+  const [editFormData, setEditFormData] = useState({
     name: '',
     phone: '',
     address: '',
@@ -187,6 +195,61 @@ export default function Suppliers() {
     setIsSubmitting(false);
   };
 
+  const handleEditSupplier = (supplier: SupplierData) => {
+    setSupplierToEdit(supplier);
+    setEditFormData({
+      name: supplier.name,
+      phone: supplier.phone || '',
+      address: supplier.address || '',
+      milk_rate: supplier.milk_rate.toString(),
+    });
+    setIsEditDrawerOpen(true);
+  };
+
+  const handleUpdateSupplier = async () => {
+    if (!supplierToEdit || !editFormData.name) {
+      toast({
+        title: 'Error',
+        description: 'Please enter supplier name',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    setIsSubmitting(true);
+
+    const { data, error } = await supabase
+      .from('suppliers')
+      .update({
+        name: editFormData.name,
+        phone: editFormData.phone || null,
+        address: editFormData.address || null,
+        milk_rate: parseFloat(editFormData.milk_rate) || 0,
+      })
+      .eq('id', supplierToEdit.id)
+      .select()
+      .single();
+
+    if (error) {
+      console.error('Error updating supplier:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to update supplier',
+        variant: 'destructive',
+      });
+    } else {
+      setSuppliers(suppliers.map(s => s.id === data.id ? data : s));
+      setIsEditDrawerOpen(false);
+      setSupplierToEdit(null);
+      toast({
+        title: 'Success',
+        description: 'Supplier updated successfully',
+      });
+    }
+
+    setIsSubmitting(false);
+  };
+
   if (isLoading) {
     return (
       <MainLayout title="Suppliers" subtitle="Manage your milk suppliers">
@@ -325,7 +388,12 @@ export default function Suppliers() {
                 </div>
                 {isAdmin && (
                   <div className="flex gap-1 flex-shrink-0">
-                    <Button variant="ghost" size="icon" className="h-8 w-8">
+                    <Button 
+                      variant="ghost" 
+                      size="icon" 
+                      className="h-8 w-8"
+                      onClick={() => handleEditSupplier(supplier)}
+                    >
                       <Edit className="w-4 h-4" />
                     </Button>
                     <Button 
@@ -389,6 +457,80 @@ export default function Suppliers() {
         description={`Are you sure you want to delete "${supplierToDelete?.name}"? This action cannot be undone.`}
         onConfirm={handleDeleteSupplier}
       />
+
+      {/* Edit Supplier Drawer */}
+      <Drawer open={isEditDrawerOpen} onOpenChange={setIsEditDrawerOpen}>
+        <DrawerContent>
+          <DrawerHeader>
+            <DrawerTitle>Edit Supplier</DrawerTitle>
+          </DrawerHeader>
+          <div className="space-y-4 p-4 pb-8">
+            <div className="bg-secondary/50 rounded-lg p-3 flex items-center gap-2">
+              <Hash className="w-4 h-4 text-accent" />
+              <span className="text-sm text-muted-foreground">Supplier ID:</span>
+              <span className="font-semibold text-accent">{supplierToEdit?.supplier_id}</span>
+            </div>
+            <div>
+              <Label htmlFor="edit-name" className="text-base">Name *</Label>
+              <Input
+                id="edit-name"
+                value={editFormData.name}
+                onChange={(e) => setEditFormData({ ...editFormData, name: e.target.value })}
+                placeholder="Supplier name"
+                className="h-12 text-base mt-1"
+              />
+            </div>
+            <div>
+              <Label htmlFor="edit-phone" className="text-base">Mobile Number (Optional)</Label>
+              <Input
+                id="edit-phone"
+                type="tel"
+                value={editFormData.phone}
+                onChange={(e) => setEditFormData({ ...editFormData, phone: e.target.value })}
+                placeholder="+91 12345 67890"
+                className="h-12 text-base mt-1"
+              />
+            </div>
+            <div>
+              <Label htmlFor="edit-address" className="text-base">Address</Label>
+              <Input
+                id="edit-address"
+                value={editFormData.address}
+                onChange={(e) => setEditFormData({ ...editFormData, address: e.target.value })}
+                placeholder="Supplier address"
+                className="h-12 text-base mt-1"
+              />
+            </div>
+            <div>
+              <Label htmlFor="edit-milk_rate" className="text-base">Milk Rate (₹/L) *</Label>
+              <Input
+                id="edit-milk_rate"
+                type="number"
+                step="0.01"
+                value={editFormData.milk_rate}
+                onChange={(e) => setEditFormData({ ...editFormData, milk_rate: e.target.value })}
+                placeholder="e.g. 50.00"
+                className="h-12 text-base mt-1"
+              />
+            </div>
+            <Button 
+              onClick={handleUpdateSupplier} 
+              className="w-full h-12 text-base" 
+              variant="gradient"
+              disabled={isSubmitting}
+            >
+              {isSubmitting ? (
+                <span className="flex items-center gap-2">
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Updating...
+                </span>
+              ) : (
+                'Update Supplier'
+              )}
+            </Button>
+          </div>
+        </DrawerContent>
+      </Drawer>
     </MainLayout>
   );
 }
