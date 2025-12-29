@@ -1,5 +1,7 @@
+import { useState } from 'react';
 import { cn } from '@/lib/utils';
-import { Truck, IndianRupee } from 'lucide-react';
+import { Truck, IndianRupee, Search } from 'lucide-react';
+import { Input } from '@/components/ui/input';
 
 interface Supplier {
   id: string;
@@ -16,16 +18,32 @@ interface SuppliersListProps {
 }
 
 export function SuppliersList({ suppliers, onSelectSupplier }: SuppliersListProps) {
+  const [searchQuery, setSearchQuery] = useState('');
+
+  const filteredSuppliers = suppliers.filter((supplier) =>
+    supplier.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    supplier.supplier_id.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
   return (
     <div className="stat-card animate-slide-up">
       <h3 className="text-lg font-display font-semibold text-foreground mb-4">
         All Suppliers
       </h3>
-      <div className="space-y-3 max-h-[400px] overflow-y-auto">
-        {suppliers.length === 0 ? (
+      <div className="relative mb-3">
+        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+        <Input
+          placeholder="Search by name or ID..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          className="pl-9"
+        />
+      </div>
+      <div className="space-y-3 max-h-[350px] overflow-y-auto">
+        {filteredSuppliers.length === 0 ? (
           <p className="text-center text-muted-foreground py-4">No suppliers found</p>
         ) : (
-          suppliers.map((supplier) => (
+          filteredSuppliers.map((supplier) => (
             <div
               key={supplier.id}
               onClick={() => onSelectSupplier(supplier)}
