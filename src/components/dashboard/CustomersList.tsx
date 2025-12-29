@@ -1,5 +1,7 @@
+import { useState } from 'react';
 import { cn } from '@/lib/utils';
-import { User, IndianRupee } from 'lucide-react';
+import { User, IndianRupee, Search } from 'lucide-react';
+import { Input } from '@/components/ui/input';
 
 interface Customer {
   id: string;
@@ -16,16 +18,32 @@ interface CustomersListProps {
 }
 
 export function CustomersList({ customers, onSelectCustomer }: CustomersListProps) {
+  const [searchQuery, setSearchQuery] = useState('');
+
+  const filteredCustomers = customers.filter((customer) =>
+    customer.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    customer.customer_id.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
   return (
     <div className="stat-card animate-slide-up">
       <h3 className="text-lg font-display font-semibold text-foreground mb-4">
         All Customers
       </h3>
-      <div className="space-y-3 max-h-[400px] overflow-y-auto">
-        {customers.length === 0 ? (
+      <div className="relative mb-3">
+        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+        <Input
+          placeholder="Search by name or ID..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          className="pl-9"
+        />
+      </div>
+      <div className="space-y-3 max-h-[350px] overflow-y-auto">
+        {filteredCustomers.length === 0 ? (
           <p className="text-center text-muted-foreground py-4">No customers found</p>
         ) : (
-          customers.map((customer) => (
+          filteredCustomers.map((customer) => (
             <div
               key={customer.id}
               onClick={() => onSelectCustomer(customer)}
