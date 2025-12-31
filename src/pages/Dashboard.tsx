@@ -52,6 +52,8 @@ export default function Dashboard() {
     totalSales: 0,
     totalCredit: 0,
     totalDebit: 0,
+    totalPurchaseQty: 0,
+    totalSalesQty: 0,
   });
   const [selectedEntity, setSelectedEntity] = useState<{
     id: string;
@@ -86,31 +88,36 @@ export default function Dashboard() {
         // Calculate daily summary
         const summary = txData.reduce((acc, tx) => {
           const amount = Number(tx.amount);
-          if (tx.type === 'purchase') acc.totalPurchase += amount;
-          else if (tx.type === 'sale') acc.totalSales += amount;
-          else if (tx.type === 'credit') acc.totalCredit += amount;
+          const quantity = Number(tx.quantity);
+          if (tx.type === 'purchase') {
+            acc.totalPurchase += amount;
+            acc.totalPurchaseQty += quantity;
+          } else if (tx.type === 'sale') {
+            acc.totalSales += amount;
+            acc.totalSalesQty += quantity;
+          } else if (tx.type === 'credit') acc.totalCredit += amount;
           else if (tx.type === 'debit') acc.totalDebit += amount;
           return acc;
-        }, { totalPurchase: 0, totalSales: 0, totalCredit: 0, totalDebit: 0 });
+        }, { totalPurchase: 0, totalSales: 0, totalCredit: 0, totalDebit: 0, totalPurchaseQty: 0, totalSalesQty: 0 });
         
         setDailySummary(summary);
       }
 
-      // Fetch all customers with balances
+      // Fetch all customers with balances (sorted by customer_id)
       const { data: custData } = await supabase
         .from('customers')
         .select('id, customer_id, name, phone, balance, milk_rate')
-        .order('name', { ascending: true });
+        .order('customer_id', { ascending: true });
 
       if (custData) {
         setCustomers(custData);
       }
 
-      // Fetch all suppliers
+      // Fetch all suppliers (sorted by supplier_id)
       const { data: suppData } = await supabase
         .from('suppliers')
         .select('id, supplier_id, name, phone, balance, milk_rate')
-        .order('name', { ascending: true });
+        .order('supplier_id', { ascending: true });
 
       if (suppData) {
         setSuppliers(suppData);
@@ -195,16 +202,18 @@ export default function Dashboard() {
       </div>
 
       {/* Daily Stats Grid */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-6 mb-6 sm:mb-8">
+      <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-6 mb-6 sm:mb-8">
         <StatCard
           title="Today's Purchase"
           value={`₹${dailySummary.totalPurchase.toLocaleString('en-IN')}`}
+          subtitle={`${dailySummary.totalPurchaseQty.toLocaleString('en-IN')} L`}
           icon={ShoppingCart}
           variant="default"
         />
         <StatCard
           title="Today's Sales"
           value={`₹${dailySummary.totalSales.toLocaleString('en-IN')}`}
+          subtitle={`${dailySummary.totalSalesQty.toLocaleString('en-IN')} L`}
           icon={TrendingUp}
           variant="accent"
         />
@@ -214,6 +223,8 @@ export default function Dashboard() {
           icon={CreditCard}
           variant="success"
         />
+      </div>
+      <div className="grid grid-cols-1 lg:grid-cols-1 gap-3 sm:gap-6 mb-6 sm:mb-8">
         <StatCard
           title="Paid Amount"
           value={`₹${dailySummary.totalDebit.toLocaleString('en-IN')}`}
