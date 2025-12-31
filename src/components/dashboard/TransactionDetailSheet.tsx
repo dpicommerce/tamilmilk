@@ -81,58 +81,91 @@ export function TransactionDetailSheet({ isOpen, onClose, entity }: TransactionD
       .order('created_at', { ascending: true });
 
     if (data) {
-      // Split into 3 periods: 1-10, 11-20, 21-end
-      const periods: PeriodSummary[] = [
-        {
-          period: '1st - 10th',
-          startDate: new Date(monthStart.getFullYear(), monthStart.getMonth(), 1),
-          endDate: new Date(monthStart.getFullYear(), monthStart.getMonth(), 10),
-          totalQuantity: 0,
-          totalAmount: 0,
-          creditAmount: 0,
-          debitAmount: 0,
-          transactions: [],
-        },
-        {
-          period: '11th - 20th',
-          startDate: new Date(monthStart.getFullYear(), monthStart.getMonth(), 11),
-          endDate: new Date(monthStart.getFullYear(), monthStart.getMonth(), 20),
-          totalQuantity: 0,
-          totalAmount: 0,
-          creditAmount: 0,
-          debitAmount: 0,
-          transactions: [],
-        },
-        {
-          period: '21st - ' + format(monthEnd, 'd') + 'th',
-          startDate: new Date(monthStart.getFullYear(), monthStart.getMonth(), 21),
-          endDate: monthEnd,
-          totalQuantity: 0,
-          totalAmount: 0,
-          creditAmount: 0,
-          debitAmount: 0,
-          transactions: [],
-        },
-      ];
+      // For customers: monthly view only
+      // For suppliers: split into 3 periods: 1-10, 11-20, 21-end
+      let periods: PeriodSummary[] = [];
 
-      data.forEach((tx) => {
-        const txDate = new Date(tx.created_at);
-        const day = txDate.getDate();
-        let periodIndex = 0;
-        if (day >= 11 && day <= 20) periodIndex = 1;
-        else if (day >= 21) periodIndex = 2;
+      if (entity.type === 'customer') {
+        // Single monthly period for customers
+        periods = [
+          {
+            period: format(selectedMonth, 'MMMM yyyy'),
+            startDate: monthStart,
+            endDate: monthEnd,
+            totalQuantity: 0,
+            totalAmount: 0,
+            creditAmount: 0,
+            debitAmount: 0,
+            transactions: [],
+          },
+        ];
 
-        periods[periodIndex].transactions.push(tx);
-        
-        if (tx.type === 'sale' || tx.type === 'purchase') {
-          periods[periodIndex].totalQuantity += Number(tx.quantity);
-          periods[periodIndex].totalAmount += Number(tx.amount);
-        } else if (tx.type === 'credit') {
-          periods[periodIndex].creditAmount += Number(tx.amount);
-        } else if (tx.type === 'debit') {
-          periods[periodIndex].debitAmount += Number(tx.amount);
-        }
-      });
+        data.forEach((tx) => {
+          periods[0].transactions.push(tx);
+          
+          if (tx.type === 'sale' || tx.type === 'purchase') {
+            periods[0].totalQuantity += Number(tx.quantity);
+            periods[0].totalAmount += Number(tx.amount);
+          } else if (tx.type === 'credit') {
+            periods[0].creditAmount += Number(tx.amount);
+          } else if (tx.type === 'debit') {
+            periods[0].debitAmount += Number(tx.amount);
+          }
+        });
+      } else {
+        // Split into 3 periods for suppliers: 1-10, 11-20, 21-end
+        periods = [
+          {
+            period: '1st - 10th',
+            startDate: new Date(monthStart.getFullYear(), monthStart.getMonth(), 1),
+            endDate: new Date(monthStart.getFullYear(), monthStart.getMonth(), 10),
+            totalQuantity: 0,
+            totalAmount: 0,
+            creditAmount: 0,
+            debitAmount: 0,
+            transactions: [],
+          },
+          {
+            period: '11th - 20th',
+            startDate: new Date(monthStart.getFullYear(), monthStart.getMonth(), 11),
+            endDate: new Date(monthStart.getFullYear(), monthStart.getMonth(), 20),
+            totalQuantity: 0,
+            totalAmount: 0,
+            creditAmount: 0,
+            debitAmount: 0,
+            transactions: [],
+          },
+          {
+            period: '21st - ' + format(monthEnd, 'd') + 'th',
+            startDate: new Date(monthStart.getFullYear(), monthStart.getMonth(), 21),
+            endDate: monthEnd,
+            totalQuantity: 0,
+            totalAmount: 0,
+            creditAmount: 0,
+            debitAmount: 0,
+            transactions: [],
+          },
+        ];
+
+        data.forEach((tx) => {
+          const txDate = new Date(tx.created_at);
+          const day = txDate.getDate();
+          let periodIndex = 0;
+          if (day >= 11 && day <= 20) periodIndex = 1;
+          else if (day >= 21) periodIndex = 2;
+
+          periods[periodIndex].transactions.push(tx);
+          
+          if (tx.type === 'sale' || tx.type === 'purchase') {
+            periods[periodIndex].totalQuantity += Number(tx.quantity);
+            periods[periodIndex].totalAmount += Number(tx.amount);
+          } else if (tx.type === 'credit') {
+            periods[periodIndex].creditAmount += Number(tx.amount);
+          } else if (tx.type === 'debit') {
+            periods[periodIndex].debitAmount += Number(tx.amount);
+          }
+        });
+      }
 
       setPeriodSummaries(periods);
     }
@@ -244,13 +277,15 @@ export function TransactionDetailSheet({ isOpen, onClose, entity }: TransactionD
           </div>
         ) : (
           <Tabs defaultValue="0" className="mt-6">
-            <TabsList className="w-full grid grid-cols-3">
-              {periodSummaries.map((period, index) => (
-                <TabsTrigger key={index} value={String(index)} className="text-xs">
-                  {period.period}
-                </TabsTrigger>
-              ))}
-            </TabsList>
+            {periodSummaries.length > 1 && (
+              <TabsList className={cn("w-full grid", `grid-cols-${periodSummaries.length}`)}>
+                {periodSummaries.map((period, index) => (
+                  <TabsTrigger key={index} value={String(index)} className="text-xs">
+                    {period.period}
+                  </TabsTrigger>
+                ))}
+              </TabsList>
+            )}
             {periodSummaries.map((period, index) => {
               const transactionsWithTotal = getTransactionsWithRunningTotal(period.transactions, entity.type);
               
