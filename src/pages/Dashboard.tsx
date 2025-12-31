@@ -233,11 +233,6 @@ export default function Dashboard() {
         />
       </div>
 
-      {/* Quick Actions */}
-      <div className="mb-6">
-        <QuickActions />
-      </div>
-
       {/* Suppliers and Customers Lists */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
         <SuppliersList suppliers={suppliers} onSelectSupplier={handleSelectSupplier} />
