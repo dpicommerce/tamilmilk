@@ -106,6 +106,26 @@ export default function Purchases() {
     fetchData();
   }, []);
 
+  const sendSmsNotification = async (phone: string, supplierName: string, qty: number, amt: number) => {
+    if (!phone) return;
+    
+    try {
+      const message = `Dear ${supplierName}, your milk purchase of ${qty}L for ₹${amt.toLocaleString('en-IN')} has been recorded. Thank you!`;
+      
+      const { error } = await supabase.functions.invoke('send-sms', {
+        body: { to: phone, message }
+      });
+      
+      if (error) {
+        console.error('SMS send error:', error);
+      } else {
+        console.log('SMS sent successfully to', phone);
+      }
+    } catch (err) {
+      console.error('Failed to send SMS:', err);
+    }
+  };
+
   const handleAddPurchase = async () => {
     if (!formData.supplierId || !formData.quantity || !formData.rate) {
       toast({
@@ -152,6 +172,17 @@ export default function Purchases() {
         notes: formData.notes || null,
         created_at: data.created_at,
       }, ...purchases]);
+      
+      // Send SMS notification to supplier
+      const { data: supplierData } = await supabase
+        .from('suppliers')
+        .select('phone')
+        .eq('id', formData.supplierId)
+        .single();
+      
+      if (supplierData?.phone) {
+        sendSmsNotification(supplierData.phone, supplier.name, parseFloat(formData.quantity), amount);
+      }
       
       setFormData({
         supplierId: '',
