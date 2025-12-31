@@ -66,11 +66,11 @@ export default function Purchases() {
         setFormData(prev => ({ ...prev, rate: settingsData.value }));
       }
 
-      // Fetch suppliers with milk rates
+      // Fetch suppliers with milk rates (sorted by supplier_id)
       const { data: suppData } = await supabase
         .from('suppliers')
         .select('id, supplier_id, name, milk_rate')
-        .order('name');
+        .order('supplier_id');
       
       if (suppData) setSuppliers(suppData);
 
