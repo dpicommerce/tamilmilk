@@ -10,6 +10,14 @@ import {
   SheetTitle,
 } from '@/components/ui/sheet';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
 
 interface TransactionDetailSheetProps {
   isOpen: boolean;
@@ -142,11 +150,42 @@ export function TransactionDetailSheet({ isOpen, onClose, entity }: TransactionD
     return months;
   };
 
+  // Calculate running total for a period's transactions
+  const getTransactionsWithRunningTotal = (transactions: Transaction[], entityType: 'customer' | 'supplier') => {
+    let runningTotal = 0;
+    return transactions.map((tx, index) => {
+      const quantity = tx.type === 'sale' || tx.type === 'purchase' ? Number(tx.quantity) : 0;
+      const rate = tx.type === 'sale' || tx.type === 'purchase' ? Number(tx.rate) : 0;
+      const credit = tx.type === 'credit' ? Number(tx.amount) : 0;
+      const debit = tx.type === 'debit' ? Number(tx.amount) : 0;
+      
+      // For customers: sales add to balance, credits reduce balance
+      // For suppliers: purchases add to what we owe, debits reduce what we owe
+      if (entityType === 'customer') {
+        if (tx.type === 'sale') runningTotal += Number(tx.amount);
+        if (tx.type === 'credit') runningTotal -= Number(tx.amount);
+      } else {
+        if (tx.type === 'purchase') runningTotal += Number(tx.amount);
+        if (tx.type === 'debit') runningTotal -= Number(tx.amount);
+      }
+
+      return {
+        ...tx,
+        serialNo: index + 1,
+        quantity,
+        rate,
+        credit,
+        debit,
+        runningTotal,
+      };
+    });
+  };
+
   if (!entity) return null;
 
   return (
     <Sheet open={isOpen} onOpenChange={onClose}>
-      <SheetContent className="w-full sm:max-w-lg overflow-y-auto">
+      <SheetContent className="w-full sm:max-w-4xl overflow-y-auto">
         <SheetHeader>
           <SheetTitle className="flex items-center gap-3">
             <div className={cn(
@@ -212,79 +251,111 @@ export function TransactionDetailSheet({ isOpen, onClose, entity }: TransactionD
                 </TabsTrigger>
               ))}
             </TabsList>
-            {periodSummaries.map((period, index) => (
-              <TabsContent key={index} value={String(index)} className="mt-4 space-y-4">
-                {/* Summary Cards */}
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="p-3 rounded-lg bg-primary/10">
-                    <p className="text-xs text-muted-foreground">Total Quantity</p>
-                    <p className="text-lg font-semibold text-primary">
-                      {period.totalQuantity.toFixed(1)} L
-                    </p>
+            {periodSummaries.map((period, index) => {
+              const transactionsWithTotal = getTransactionsWithRunningTotal(period.transactions, entity.type);
+              
+              return (
+                <TabsContent key={index} value={String(index)} className="mt-4 space-y-4">
+                  {/* Summary Cards */}
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                    <div className="p-3 rounded-lg bg-primary/10">
+                      <p className="text-xs text-muted-foreground">Total Quantity</p>
+                      <p className="text-lg font-semibold text-primary">
+                        {period.totalQuantity.toFixed(1)} L
+                      </p>
+                    </div>
+                    <div className="p-3 rounded-lg bg-accent/10">
+                      <p className="text-xs text-muted-foreground">Total Amount</p>
+                      <p className="text-lg font-semibold text-accent">
+                        ₹{period.totalAmount.toLocaleString('en-IN')}
+                      </p>
+                    </div>
+                    <div className="p-3 rounded-lg bg-success/10">
+                      <p className="text-xs text-muted-foreground">Credit Received</p>
+                      <p className="text-lg font-semibold text-success">
+                        ₹{period.creditAmount.toLocaleString('en-IN')}
+                      </p>
+                    </div>
+                    <div className="p-3 rounded-lg bg-warning/10">
+                      <p className="text-xs text-muted-foreground">Debit/Advance</p>
+                      <p className="text-lg font-semibold text-warning">
+                        ₹{period.debitAmount.toLocaleString('en-IN')}
+                      </p>
+                    </div>
                   </div>
-                  <div className="p-3 rounded-lg bg-accent/10">
-                    <p className="text-xs text-muted-foreground">Total Amount</p>
-                    <p className="text-lg font-semibold text-accent">
-                      ₹{period.totalAmount.toLocaleString('en-IN')}
-                    </p>
-                  </div>
-                  <div className="p-3 rounded-lg bg-success/10">
-                    <p className="text-xs text-muted-foreground">Credit Received</p>
-                    <p className="text-lg font-semibold text-success">
-                      ₹{period.creditAmount.toLocaleString('en-IN')}
-                    </p>
-                  </div>
-                  <div className="p-3 rounded-lg bg-warning/10">
-                    <p className="text-xs text-muted-foreground">Debit/Advance</p>
-                    <p className="text-lg font-semibold text-warning">
-                      ₹{period.debitAmount.toLocaleString('en-IN')}
-                    </p>
-                  </div>
-                </div>
 
-                {/* Transaction List */}
-                <div className="space-y-2">
-                  <p className="text-sm font-medium">Transactions</p>
-                  {period.transactions.length === 0 ? (
-                    <p className="text-sm text-muted-foreground text-center py-4">
-                      No transactions in this period
-                    </p>
-                  ) : (
-                    period.transactions.map((tx) => (
-                      <div
-                        key={tx.id}
-                        className="p-3 rounded-lg bg-secondary/30 flex items-center justify-between"
-                      >
-                        <div>
-                          <p className={cn(
-                            "text-sm font-medium capitalize",
-                            tx.type === 'credit' && 'text-success',
-                            tx.type === 'debit' && 'text-warning',
-                            tx.type === 'sale' && 'text-primary',
-                            tx.type === 'purchase' && 'text-accent'
-                          )}>
-                            {tx.type}
-                          </p>
-                          <p className="text-xs text-muted-foreground">
-                            {format(new Date(tx.created_at), 'dd MMM, h:mm a')}
-                          </p>
-                        </div>
-                        <div className="text-right">
-                          {(tx.type === 'sale' || tx.type === 'purchase') && (
-                            <p className="text-xs text-muted-foreground">
-                              {Number(tx.quantity)}L × ₹{Number(tx.rate)}
-                            </p>
-                          )}
-                          <p className="font-semibold">
-                            ₹{Number(tx.amount).toLocaleString('en-IN')}
-                          </p>
-                        </div>
+                  {/* Transaction Table */}
+                  <div className="space-y-2">
+                    <p className="text-sm font-medium">Transaction Details</p>
+                    {period.transactions.length === 0 ? (
+                      <p className="text-sm text-muted-foreground text-center py-4">
+                        No transactions in this period
+                      </p>
+                    ) : (
+                      <div className="rounded-md border overflow-x-auto">
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead className="w-12 text-center">S.No</TableHead>
+                              <TableHead className="w-24">Date</TableHead>
+                              <TableHead className="w-24">ID</TableHead>
+                              <TableHead>Type</TableHead>
+                              <TableHead className="text-right">Qty (L)</TableHead>
+                              <TableHead className="text-right">Rate</TableHead>
+                              <TableHead className="text-right text-success">Credit</TableHead>
+                              <TableHead className="text-right text-warning">Debit</TableHead>
+                              <TableHead className="text-right">Total</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {transactionsWithTotal.map((tx) => (
+                              <TableRow key={tx.id}>
+                                <TableCell className="text-center font-medium">{tx.serialNo}</TableCell>
+                                <TableCell className="text-xs">
+                                  {format(new Date(tx.created_at), 'dd/MM/yy')}
+                                </TableCell>
+                                <TableCell className="text-xs font-mono">
+                                  {tx.id.slice(0, 8)}
+                                </TableCell>
+                                <TableCell>
+                                  <span className={cn(
+                                    "text-xs font-medium capitalize px-2 py-1 rounded",
+                                    tx.type === 'credit' && 'bg-success/10 text-success',
+                                    tx.type === 'debit' && 'bg-warning/10 text-warning',
+                                    tx.type === 'sale' && 'bg-primary/10 text-primary',
+                                    tx.type === 'purchase' && 'bg-accent/10 text-accent'
+                                  )}>
+                                    {tx.type}
+                                  </span>
+                                </TableCell>
+                                <TableCell className="text-right">
+                                  {tx.quantity > 0 ? tx.quantity.toFixed(1) : '-'}
+                                </TableCell>
+                                <TableCell className="text-right">
+                                  {tx.rate > 0 ? `₹${tx.rate.toFixed(2)}` : '-'}
+                                </TableCell>
+                                <TableCell className="text-right text-success font-medium">
+                                  {tx.credit > 0 ? `₹${tx.credit.toLocaleString('en-IN')}` : '-'}
+                                </TableCell>
+                                <TableCell className="text-right text-warning font-medium">
+                                  {tx.debit > 0 ? `₹${tx.debit.toLocaleString('en-IN')}` : '-'}
+                                </TableCell>
+                                <TableCell className={cn(
+                                  "text-right font-semibold",
+                                  tx.runningTotal >= 0 ? 'text-success' : 'text-destructive'
+                                )}>
+                                  ₹{Math.abs(tx.runningTotal).toLocaleString('en-IN')}
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
                       </div>
-                    ))
-                  )}
-                </div>
-              </TabsContent>
-            ))}
+                    )}
+                  </div>
+                </TabsContent>
+              );
+            })}
           </Tabs>
         )}
       </SheetContent>
