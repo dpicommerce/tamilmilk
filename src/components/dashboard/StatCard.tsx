@@ -4,6 +4,7 @@ import { cn } from '@/lib/utils';
 interface StatCardProps {
   title: string;
   value: string | number;
+  subtitle?: string;
   icon: LucideIcon;
   trend?: {
     value: number;
@@ -28,7 +29,7 @@ const iconVariantStyles = {
   warning: 'bg-primary-foreground/20 text-warning-foreground',
 };
 
-export function StatCard({ title, value, icon: Icon, trend, variant = 'default' }: StatCardProps) {
+export function StatCard({ title, value, subtitle, icon: Icon, trend, variant = 'default' }: StatCardProps) {
   const isColored = variant !== 'default';
 
   return (
@@ -47,6 +48,14 @@ export function StatCard({ title, value, icon: Icon, trend, variant = 'default' 
             {title}
           </p>
           <p className="text-3xl font-display font-bold mt-2">{value}</p>
+          {subtitle && (
+            <p className={cn(
+              'text-sm font-medium mt-1',
+              isColored ? 'opacity-80' : 'text-muted-foreground'
+            )}>
+              {subtitle}
+            </p>
+          )}
           {trend && (
             <div className="flex items-center gap-1 mt-2">
               <span
