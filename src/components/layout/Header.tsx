@@ -1,3 +1,4 @@
+import { ReactNode } from 'react';
 import { Bell, Search, User, LogOut, Shield, ArrowLeft } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -14,9 +15,10 @@ import {
 interface HeaderProps {
   title: string;
   subtitle?: string;
+  headerAction?: ReactNode;
 }
 
-export function Header({ title, subtitle }: HeaderProps) {
+export function Header({ title, subtitle, headerAction }: HeaderProps) {
   const { user, isAdmin, signOut } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
@@ -44,6 +46,9 @@ export function Header({ title, subtitle }: HeaderProps) {
       </div>
 
       <div className="flex items-center gap-2 sm:gap-4">
+        {/* Header Action (like Send SMS button) */}
+        {headerAction}
+        
         {/* Search */}
         <div className="relative hidden md:block">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />

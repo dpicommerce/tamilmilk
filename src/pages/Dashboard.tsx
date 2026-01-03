@@ -6,7 +6,9 @@ import { QuickActions } from '@/components/dashboard/QuickActions';
 import { CustomersList } from '@/components/dashboard/CustomersList';
 import { SuppliersList } from '@/components/dashboard/SuppliersList';
 import { TransactionDetailSheet } from '@/components/dashboard/TransactionDetailSheet';
+import { SendSmsDialog } from '@/components/SendSmsDialog';
 import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/hooks/useAuth';
 import { ShoppingCart, TrendingUp, CreditCard, Wallet, Loader2, Users, Truck } from 'lucide-react';
 import { format, startOfDay, endOfDay } from 'date-fns';
 
@@ -43,6 +45,7 @@ interface SupplierData {
 }
 
 export default function Dashboard() {
+  const { isAdmin } = useAuth();
   const [isLoading, setIsLoading] = useState(true);
   const [transactions, setTransactions] = useState<TransactionData[]>([]);
   const [customers, setCustomers] = useState<CustomerData[]>([]);
@@ -178,6 +181,7 @@ export default function Dashboard() {
     <MainLayout
       title="Dashboard"
       subtitle={format(new Date(), 'EEEE, MMMM d, yyyy')}
+      headerAction={isAdmin ? <SendSmsDialog /> : undefined}
     >
       {/* Stats Grid */}
       <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-6 mb-6 sm:mb-8">
