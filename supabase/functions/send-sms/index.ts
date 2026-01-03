@@ -27,57 +27,65 @@ const handler = async (req: Request): Promise<Response> => {
       );
     }
 
-    // Format phone number - ensure it has country code
+    // Format phone number - remove spaces and dashes
     let formattedPhone = to.replace(/\s+/g, "").replace(/-/g, "");
-    if (!formattedPhone.startsWith("+")) {
-      // Assume Indian number if no country code
-      formattedPhone = "+91" + formattedPhone.replace(/^0+/, "");
+    // Remove leading + if present (Exotel doesn't need it)
+    if (formattedPhone.startsWith("+")) {
+      formattedPhone = formattedPhone.substring(1);
+    }
+    // Add 91 prefix if not present (assuming Indian numbers)
+    if (!formattedPhone.startsWith("91") && formattedPhone.length === 10) {
+      formattedPhone = "91" + formattedPhone;
     }
 
     console.log(`Sending SMS to ${formattedPhone}: ${message}`);
 
-    const accountSid = Deno.env.get("TWILIO_ACCOUNT_SID");
-    const authToken = Deno.env.get("TWILIO_AUTH_TOKEN");
-    const twilioPhone = Deno.env.get("TWILIO_PHONE_NUMBER");
+    const apiKey = Deno.env.get("EXOTEL_API_KEY");
+    const apiToken = Deno.env.get("EXOTEL_API_TOKEN");
+    const subdomain = Deno.env.get("EXOTEL_SUBDOMAIN");
+    const senderId = Deno.env.get("EXOTEL_SENDER_ID");
 
-    if (!accountSid || !authToken || !twilioPhone) {
-      console.error("Missing Twilio credentials");
+    if (!apiKey || !apiToken || !subdomain || !senderId) {
+      console.error("Missing Exotel credentials");
       return new Response(
         JSON.stringify({ error: "SMS service not configured" }),
         { status: 500, headers: { "Content-Type": "application/json", ...corsHeaders } }
       );
     }
 
-    const twilioUrl = `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`;
-    
+    // Exotel SMS API endpoint
+    const exotelUrl = `https://${apiKey}:${apiToken}@${subdomain}/v1/Accounts/${apiKey}/Sms/send`;
+
     const formData = new URLSearchParams();
+    formData.append("From", senderId);
     formData.append("To", formattedPhone);
-    formData.append("From", twilioPhone);
     formData.append("Body", message);
 
-    const response = await fetch(twilioUrl, {
+    console.log(`Calling Exotel API: ${subdomain}`);
+
+    const response = await fetch(exotelUrl, {
       method: "POST",
       headers: {
-        "Authorization": "Basic " + btoa(`${accountSid}:${authToken}`),
         "Content-Type": "application/x-www-form-urlencoded",
       },
       body: formData.toString(),
     });
 
-    const result = await response.json();
+    const resultText = await response.text();
+    console.log("Exotel response:", resultText);
 
     if (!response.ok) {
-      console.error("Twilio error:", result);
+      console.error("Exotel error:", resultText);
       return new Response(
-        JSON.stringify({ error: result.message || "Failed to send SMS" }),
+        JSON.stringify({ error: "Failed to send SMS", details: resultText }),
         { status: response.status, headers: { "Content-Type": "application/json", ...corsHeaders } }
       );
     }
 
-    console.log("SMS sent successfully:", result.sid);
+    console.log("SMS sent successfully via Exotel");
 
     return new Response(
-      JSON.stringify({ success: true, sid: result.sid }),
+      JSON.stringify({ success: true, response: resultText }),
       { status: 200, headers: { "Content-Type": "application/json", ...corsHeaders } }
     );
   } catch (error: any) {
