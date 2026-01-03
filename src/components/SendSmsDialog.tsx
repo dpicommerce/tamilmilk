@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -19,7 +20,26 @@ import {
   TabsList,
   TabsTrigger,
 } from '@/components/ui/tabs';
-import { MessageSquare, Loader2, Send, Users, Truck, CheckCircle2, XCircle } from 'lucide-react';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { 
+  MessageSquare, 
+  Loader2, 
+  Send, 
+  Users, 
+  Truck, 
+  CheckCircle2, 
+  XCircle,
+  Save,
+  FileText,
+  Trash2,
+  Plus
+} from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 
 interface Customer {
@@ -45,19 +65,32 @@ interface SendResult {
   error?: string;
 }
 
+interface SmsTemplate {
+  id: string;
+  name: string;
+  message: string;
+  template_type: 'customer' | 'supplier' | 'general';
+}
+
 export function SendSmsDialog() {
   const [isOpen, setIsOpen] = useState(false);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
+  const [templates, setTemplates] = useState<SmsTemplate[]>([]);
   const [selectedCustomers, setSelectedCustomers] = useState<string[]>([]);
   const [selectedSuppliers, setSelectedSuppliers] = useState<string[]>([]);
   const [customerMessage, setCustomerMessage] = useState('');
   const [supplierMessage, setSupplierMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [isSending, setIsSending] = useState(false);
+  const [isSavingTemplate, setIsSavingTemplate] = useState(false);
   const [sendResults, setSendResults] = useState<SendResult[]>([]);
   const [showResults, setShowResults] = useState(false);
+  const [showTemplateForm, setShowTemplateForm] = useState(false);
+  const [newTemplateName, setNewTemplateName] = useState('');
+  const [activeTab, setActiveTab] = useState<'customers' | 'suppliers'>('customers');
   const { toast } = useToast();
+  const { user } = useAuth();
 
   useEffect(() => {
     if (isOpen) {
@@ -68,9 +101,10 @@ export function SendSmsDialog() {
   const fetchData = async () => {
     setIsLoading(true);
     
-    const [customersRes, suppliersRes] = await Promise.all([
+    const [customersRes, suppliersRes, templatesRes] = await Promise.all([
       supabase.from('customers').select('id, customer_id, name, phone, balance').order('name'),
       supabase.from('suppliers').select('id, supplier_id, name, phone, balance').order('name'),
+      supabase.from('sms_templates').select('*').order('name'),
     ]);
 
     if (customersRes.data) {
@@ -78,6 +112,9 @@ export function SendSmsDialog() {
     }
     if (suppliersRes.data) {
       setSuppliers(suppliersRes.data.filter(s => s.phone));
+    }
+    if (templatesRes.data) {
+      setTemplates(templatesRes.data as SmsTemplate[]);
     }
 
     setIsLoading(false);
@@ -126,6 +163,96 @@ export function SendSmsDialog() {
     }
   };
 
+  const handleSaveTemplate = async () => {
+    const message = activeTab === 'customers' ? customerMessage : supplierMessage;
+    
+    if (!newTemplateName.trim()) {
+      toast({
+        title: 'Error',
+        description: 'Please enter a template name',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    if (!message.trim()) {
+      toast({
+        title: 'Error',
+        description: 'Please enter a message first',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    setIsSavingTemplate(true);
+
+    const { data, error } = await supabase
+      .from('sms_templates')
+      .insert({
+        name: newTemplateName.trim(),
+        message: message.trim(),
+        template_type: activeTab === 'customers' ? 'customer' : 'supplier',
+        created_by: user?.id,
+      })
+      .select()
+      .single();
+
+    if (error) {
+      toast({
+        title: 'Error',
+        description: 'Failed to save template',
+        variant: 'destructive',
+      });
+    } else {
+      setTemplates([...templates, data as SmsTemplate]);
+      setNewTemplateName('');
+      setShowTemplateForm(false);
+      toast({
+        title: 'Success',
+        description: 'Template saved successfully',
+      });
+    }
+
+    setIsSavingTemplate(false);
+  };
+
+  const handleDeleteTemplate = async (templateId: string) => {
+    const { error } = await supabase
+      .from('sms_templates')
+      .delete()
+      .eq('id', templateId);
+
+    if (error) {
+      toast({
+        title: 'Error',
+        description: 'Failed to delete template',
+        variant: 'destructive',
+      });
+    } else {
+      setTemplates(templates.filter(t => t.id !== templateId));
+      toast({
+        title: 'Success',
+        description: 'Template deleted',
+      });
+    }
+  };
+
+  const handleSelectTemplate = (templateId: string) => {
+    const template = templates.find(t => t.id === templateId);
+    if (template) {
+      if (activeTab === 'customers') {
+        setCustomerMessage(template.message);
+      } else {
+        setSupplierMessage(template.message);
+      }
+    }
+  };
+
+  const getFilteredTemplates = () => {
+    const type = activeTab === 'customers' ? 'customer' : 'supplier';
+    return templates.filter(t => t.template_type === type || t.template_type === 'general');
+  };
+
   const handleSendToCustomers = async () => {
     if (selectedCustomers.length === 0) {
       toast({
@@ -151,10 +278,9 @@ export function SendSmsDialog() {
     for (const customerId of selectedCustomers) {
       const customer = customers.find(c => c.id === customerId);
       if (customer && customer.phone) {
-        // Replace placeholders in message
         const personalizedMessage = customerMessage
-          .replace('{name}', customer.name)
-          .replace('{balance}', `₹${Math.abs(customer.balance).toLocaleString('en-IN')}`);
+          .replace(/{name}/g, customer.name)
+          .replace(/{balance}/g, `₹${Math.abs(customer.balance).toLocaleString('en-IN')}`);
         
         const result = await sendSms(customer.phone, personalizedMessage);
         results.push({
@@ -203,10 +329,9 @@ export function SendSmsDialog() {
     for (const supplierId of selectedSuppliers) {
       const supplier = suppliers.find(s => s.id === supplierId);
       if (supplier && supplier.phone) {
-        // Replace placeholders in message
         const personalizedMessage = supplierMessage
-          .replace('{name}', supplier.name)
-          .replace('{balance}', `₹${Math.abs(supplier.balance).toLocaleString('en-IN')}`);
+          .replace(/{name}/g, supplier.name)
+          .replace(/{balance}/g, `₹${Math.abs(supplier.balance).toLocaleString('en-IN')}`);
         
         const result = await sendSms(supplier.phone, personalizedMessage);
         results.push({
@@ -237,7 +362,11 @@ export function SendSmsDialog() {
     setSupplierMessage('');
     setSendResults([]);
     setShowResults(false);
+    setShowTemplateForm(false);
+    setNewTemplateName('');
   };
+
+  const filteredTemplates = getFilteredTemplates();
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => {
@@ -295,7 +424,7 @@ export function SendSmsDialog() {
             <Loader2 className="w-8 h-8 animate-spin text-primary" />
           </div>
         ) : (
-          <Tabs defaultValue="customers" className="w-full">
+          <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'customers' | 'suppliers')} className="w-full">
             <TabsList className="grid w-full grid-cols-2">
               <TabsTrigger value="customers" className="gap-2">
                 <Users className="w-4 h-4" />
@@ -315,7 +444,7 @@ export function SendSmsDialog() {
                 </Button>
               </div>
 
-              <ScrollArea className="h-[200px] border rounded-lg p-2">
+              <ScrollArea className="h-[150px] border rounded-lg p-2">
                 {customers.length === 0 ? (
                   <p className="text-center text-muted-foreground py-4">
                     No customers with phone numbers
@@ -344,6 +473,48 @@ export function SendSmsDialog() {
                 )}
               </ScrollArea>
 
+              {/* Template Selection */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label className="flex items-center gap-2">
+                    <FileText className="w-4 h-4" />
+                    Use Template
+                  </Label>
+                </div>
+                <div className="flex gap-2">
+                  <Select onValueChange={handleSelectTemplate}>
+                    <SelectTrigger className="flex-1">
+                      <SelectValue placeholder="Select a template..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {filteredTemplates.length === 0 ? (
+                        <div className="p-2 text-sm text-muted-foreground">No templates saved</div>
+                      ) : (
+                        filteredTemplates.map((template) => (
+                          <SelectItem key={template.id} value={template.id}>
+                            {template.name}
+                          </SelectItem>
+                        ))
+                      )}
+                    </SelectContent>
+                  </Select>
+                  {filteredTemplates.length > 0 && (
+                    <Select onValueChange={handleDeleteTemplate}>
+                      <SelectTrigger className="w-[100px]">
+                        <Trash2 className="w-4 h-4" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {filteredTemplates.map((template) => (
+                          <SelectItem key={template.id} value={template.id} className="text-destructive">
+                            Delete: {template.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+                </div>
+              </div>
+
               <div>
                 <Label htmlFor="customerMessage" className="text-base">Message</Label>
                 <p className="text-sm text-muted-foreground mb-2">
@@ -354,9 +525,38 @@ export function SendSmsDialog() {
                   value={customerMessage}
                   onChange={(e) => setCustomerMessage(e.target.value)}
                   placeholder="Dear {name}, please verify your milk quantity. Your current balance is {balance}. Thank you!"
-                  className="min-h-[100px]"
+                  className="min-h-[80px]"
                 />
               </div>
+
+              {/* Save Template */}
+              {showTemplateForm ? (
+                <div className="flex gap-2">
+                  <Input
+                    value={newTemplateName}
+                    onChange={(e) => setNewTemplateName(e.target.value)}
+                    placeholder="Template name..."
+                    className="flex-1"
+                  />
+                  <Button onClick={handleSaveTemplate} disabled={isSavingTemplate} size="sm">
+                    {isSavingTemplate ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                  </Button>
+                  <Button variant="ghost" size="sm" onClick={() => setShowTemplateForm(false)}>
+                    Cancel
+                  </Button>
+                </div>
+              ) : (
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={() => setShowTemplateForm(true)}
+                  disabled={!customerMessage.trim()}
+                  className="gap-2"
+                >
+                  <Plus className="w-4 h-4" />
+                  Save as Template
+                </Button>
+              )}
 
               <Button 
                 onClick={handleSendToCustomers} 
@@ -380,7 +580,7 @@ export function SendSmsDialog() {
                 </Button>
               </div>
 
-              <ScrollArea className="h-[200px] border rounded-lg p-2">
+              <ScrollArea className="h-[150px] border rounded-lg p-2">
                 {suppliers.length === 0 ? (
                   <p className="text-center text-muted-foreground py-4">
                     No suppliers with phone numbers
@@ -409,6 +609,48 @@ export function SendSmsDialog() {
                 )}
               </ScrollArea>
 
+              {/* Template Selection */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label className="flex items-center gap-2">
+                    <FileText className="w-4 h-4" />
+                    Use Template
+                  </Label>
+                </div>
+                <div className="flex gap-2">
+                  <Select onValueChange={handleSelectTemplate}>
+                    <SelectTrigger className="flex-1">
+                      <SelectValue placeholder="Select a template..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {filteredTemplates.length === 0 ? (
+                        <div className="p-2 text-sm text-muted-foreground">No templates saved</div>
+                      ) : (
+                        filteredTemplates.map((template) => (
+                          <SelectItem key={template.id} value={template.id}>
+                            {template.name}
+                          </SelectItem>
+                        ))
+                      )}
+                    </SelectContent>
+                  </Select>
+                  {filteredTemplates.length > 0 && (
+                    <Select onValueChange={handleDeleteTemplate}>
+                      <SelectTrigger className="w-[100px]">
+                        <Trash2 className="w-4 h-4" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {filteredTemplates.map((template) => (
+                          <SelectItem key={template.id} value={template.id} className="text-destructive">
+                            Delete: {template.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+                </div>
+              </div>
+
               <div>
                 <Label htmlFor="supplierMessage" className="text-base">Message</Label>
                 <p className="text-sm text-muted-foreground mb-2">
@@ -419,9 +661,38 @@ export function SendSmsDialog() {
                   value={supplierMessage}
                   onChange={(e) => setSupplierMessage(e.target.value)}
                   placeholder="Dear {name}, please verify your milk supply quantity. Your current balance is {balance}. Thank you!"
-                  className="min-h-[100px]"
+                  className="min-h-[80px]"
                 />
               </div>
+
+              {/* Save Template */}
+              {showTemplateForm ? (
+                <div className="flex gap-2">
+                  <Input
+                    value={newTemplateName}
+                    onChange={(e) => setNewTemplateName(e.target.value)}
+                    placeholder="Template name..."
+                    className="flex-1"
+                  />
+                  <Button onClick={handleSaveTemplate} disabled={isSavingTemplate} size="sm">
+                    {isSavingTemplate ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                  </Button>
+                  <Button variant="ghost" size="sm" onClick={() => setShowTemplateForm(false)}>
+                    Cancel
+                  </Button>
+                </div>
+              ) : (
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={() => setShowTemplateForm(true)}
+                  disabled={!supplierMessage.trim()}
+                  className="gap-2"
+                >
+                  <Plus className="w-4 h-4" />
+                  Save as Template
+                </Button>
+              )}
 
               <Button 
                 onClick={handleSendToSuppliers} 
