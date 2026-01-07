@@ -29,7 +29,7 @@ const handler = async (req: Request): Promise<Response> => {
 
     // Format phone number - remove spaces and dashes
     let formattedPhone = to.replace(/\s+/g, "").replace(/-/g, "");
-    // Remove leading + if present (Exotel doesn't need it)
+    // Remove leading + if present
     if (formattedPhone.startsWith("+")) {
       formattedPhone = formattedPhone.substring(1);
     }
@@ -40,52 +40,51 @@ const handler = async (req: Request): Promise<Response> => {
 
     console.log(`Sending SMS to ${formattedPhone}: ${message}`);
 
-    const apiKey = Deno.env.get("EXOTEL_API_KEY");
-    const apiToken = Deno.env.get("EXOTEL_API_TOKEN");
-    const subdomain = Deno.env.get("EXOTEL_SUBDOMAIN");
-    const senderId = Deno.env.get("EXOTEL_SENDER_ID");
+    const apiKey = Deno.env.get("SMSLOCAL_API_KEY");
 
-    if (!apiKey || !apiToken || !subdomain || !senderId) {
-      console.error("Missing Exotel credentials");
+    if (!apiKey) {
+      console.error("Missing SMS Local API key");
       return new Response(
         JSON.stringify({ error: "SMS service not configured" }),
         { status: 500, headers: { "Content-Type": "application/json", ...corsHeaders } }
       );
     }
 
-    // Exotel SMS API endpoint
-    const exotelUrl = `https://${apiKey}:${apiToken}@${subdomain}/v1/Accounts/${apiKey}/Sms/send`;
+    // SMS Local HTTP API endpoint
+    const smsLocalUrl = new URL("https://app.smslocal.in/api/v2/sms");
+    smsLocalUrl.searchParams.append("apikey", apiKey);
+    smsLocalUrl.searchParams.append("message", message);
+    smsLocalUrl.searchParams.append("numbers", formattedPhone);
 
-    const formData = new URLSearchParams();
-    formData.append("From", senderId);
-    formData.append("To", formattedPhone);
-    formData.append("Body", message);
+    console.log(`Calling SMS Local API`);
 
-    console.log(`Calling Exotel API: ${subdomain}`);
-
-    const response = await fetch(exotelUrl, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/x-www-form-urlencoded",
-      },
-      body: formData.toString(),
+    const response = await fetch(smsLocalUrl.toString(), {
+      method: "GET",
     });
 
     const resultText = await response.text();
-    console.log("Exotel response:", resultText);
+    console.log("SMS Local response:", resultText);
 
     if (!response.ok) {
-      console.error("Exotel error:", resultText);
+      console.error("SMS Local error:", resultText);
       return new Response(
         JSON.stringify({ error: "Failed to send SMS", details: resultText }),
         { status: response.status, headers: { "Content-Type": "application/json", ...corsHeaders } }
       );
     }
 
-    console.log("SMS sent successfully via Exotel");
+    // Parse response to check for success
+    let result;
+    try {
+      result = JSON.parse(resultText);
+    } catch {
+      result = { raw: resultText };
+    }
+
+    console.log("SMS sent successfully via SMS Local");
 
     return new Response(
-      JSON.stringify({ success: true, response: resultText }),
+      JSON.stringify({ success: true, response: result }),
       { status: 200, headers: { "Content-Type": "application/json", ...corsHeaders } }
     );
   } catch (error: any) {
