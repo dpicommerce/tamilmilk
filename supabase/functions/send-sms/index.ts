@@ -41,9 +41,12 @@ const handler = async (req: Request): Promise<Response> => {
     console.log(`Sending SMS to ${formattedPhone}: ${message}`);
 
     const apiKey = Deno.env.get("SMSLOCAL_API_KEY");
+    const senderId = Deno.env.get("SMSLOCAL_SENDER_ID");
+    const route = Deno.env.get("SMSLOCAL_ROUTE");
+    const templateId = Deno.env.get("SMSLOCAL_TEMPLATE_ID");
 
-    if (!apiKey) {
-      console.error("Missing SMS Local API key");
+    if (!apiKey || !senderId || !route || !templateId) {
+      console.error("Missing SMS Local credentials");
       return new Response(
         JSON.stringify({ error: "SMS service not configured" }),
         { status: 500, headers: { "Content-Type": "application/json", ...corsHeaders } }
@@ -51,12 +54,15 @@ const handler = async (req: Request): Promise<Response> => {
     }
 
     // SMS Local HTTP API endpoint
-    const smsLocalUrl = new URL("https://app.smslocal.in/api/v2/sms");
-    smsLocalUrl.searchParams.append("apikey", apiKey);
-    smsLocalUrl.searchParams.append("message", message);
-    smsLocalUrl.searchParams.append("numbers", formattedPhone);
+    const smsLocalUrl = new URL("https://app.smslocal.in/api/smsapi");
+    smsLocalUrl.searchParams.append("key", apiKey);
+    smsLocalUrl.searchParams.append("route", route);
+    smsLocalUrl.searchParams.append("sender", senderId);
+    smsLocalUrl.searchParams.append("number", formattedPhone);
+    smsLocalUrl.searchParams.append("sms", message);
+    smsLocalUrl.searchParams.append("templateid", templateId);
 
-    console.log(`Calling SMS Local API`);
+    console.log(`Calling SMS Local API with sender: ${senderId}, route: ${route}`);
 
     const response = await fetch(smsLocalUrl.toString(), {
       method: "GET",
