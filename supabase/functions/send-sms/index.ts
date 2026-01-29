@@ -40,39 +40,33 @@ const handler = async (req: Request): Promise<Response> => {
 
     console.log(`Sending SMS to ${formattedPhone}: ${message}`);
 
-    const apiKey = Deno.env.get("SMSLOCAL_API_KEY");
-    const senderId = Deno.env.get("SMSLOCAL_SENDER_ID");
-    const route = Deno.env.get("SMSLOCAL_ROUTE");
-    const templateId = Deno.env.get("SMSLOCAL_TEMPLATE_ID");
+    const apiKey = Deno.env.get("APIHOME_API_KEY");
 
-    if (!apiKey || !senderId || !route || !templateId) {
-      console.error("Missing SMS Local credentials");
+    if (!apiKey) {
+      console.error("Missing APIHOME_API_KEY");
       return new Response(
         JSON.stringify({ error: "SMS service not configured" }),
         { status: 500, headers: { "Content-Type": "application/json", ...corsHeaders } }
       );
     }
 
-    // SMS Local HTTP API endpoint
-    const smsLocalUrl = new URL("https://app.smslocal.in/api/smsapi");
-    smsLocalUrl.searchParams.append("key", apiKey);
-    smsLocalUrl.searchParams.append("route", route);
-    smsLocalUrl.searchParams.append("sender", senderId);
-    smsLocalUrl.searchParams.append("number", formattedPhone);
-    smsLocalUrl.searchParams.append("sms", message);
-    smsLocalUrl.searchParams.append("templateid", templateId);
+    // APIHome.in HTTP API endpoint
+    const apiHomeUrl = new URL("https://apihome.in/panel/api/bulksms/");
+    apiHomeUrl.searchParams.append("key", apiKey);
+    apiHomeUrl.searchParams.append("mobile", formattedPhone);
+    apiHomeUrl.searchParams.append("otp", message);
 
-    console.log(`Calling SMS Local API with sender: ${senderId}, route: ${route}`);
+    console.log(`Calling APIHome.in API for mobile: ${formattedPhone}`);
 
-    const response = await fetch(smsLocalUrl.toString(), {
+    const response = await fetch(apiHomeUrl.toString(), {
       method: "GET",
     });
 
     const resultText = await response.text();
-    console.log("SMS Local response:", resultText);
+    console.log("APIHome.in response:", resultText);
 
     if (!response.ok) {
-      console.error("SMS Local error:", resultText);
+      console.error("APIHome.in error:", resultText);
       return new Response(
         JSON.stringify({ error: "Failed to send SMS", details: resultText }),
         { status: response.status, headers: { "Content-Type": "application/json", ...corsHeaders } }
@@ -87,7 +81,7 @@ const handler = async (req: Request): Promise<Response> => {
       result = { raw: resultText };
     }
 
-    console.log("SMS sent successfully via SMS Local");
+    console.log("SMS sent successfully via APIHome.in");
 
     return new Response(
       JSON.stringify({ success: true, response: result }),
